@@ -1,0 +1,328 @@
+%{  
+/*
+ *	ScanMan:	Written by Josef Goettgens and Heinz Pitsch
+ *				Copyright 1991-92, Josef Goettgens and Heinz Pitsch
+ *				All rights reserved.
+ */
+
+#include "ReactionParser.h"
+%}
+
+%union {
+	Double 			*ptrdouble;
+	Double 			typdouble;
+	int 			typint;
+	char 			typstring[10000];
+	ReactionPtr		typreaction;
+	Dimension		typdimension;
+	DimensionPtr	typdimensionptr;
+	Exponent		typexponent;
+}
+
+%type <typreaction> reaction
+%type <ptrdouble> moreinfo
+%type <typexponent> exp
+%type <typdimension> dimension
+
+/*  the token FIRSTTOKEN is just used to specify the token type 
+ *  of the token type 'error', which is the value FIRSTTOKEN - 2; therefore FIRSTTOKEN has to be the 
+ * first token of the declaration list
+ */
+%token <typint> FIRSTTOKEN
+
+%token <typstring> LETTERS 
+%token <typdimensionptr> FACTOR 
+%token <typint> SPECIES THIRDBODY
+%token <typint> RIGHTARROW LEFTARROW EQUAL LEFTBRACE
+%token <typdouble> SPECIESCOEFF MI_NUMBER
+%token <typreaction> LABEL
+%token <ptrdouble> MI_LITERAL
+%token <typexponent>E_ALPHANUM
+%left '+' '-'
+%left '/' '*'
+%right RIGHTHIGH
+%left UNARYMINUS
+%right '^'
+%left FACTOR
+%%
+
+statement:    /*  empty string  */
+			| statement reaction moreinfo '}'	{ }
+            | statement LETTERS  dimension '.'	{ 	
+													DimensionPtr dimension = NULL;
+													dimension = AddDimension( gUsedDimensionList, $2, 0, 0, 0, 0, 0, 0 );
+													CopyDimension( dimension, $3 );
+													SetExponentFlags( dimension );
+												}
+
+/*  error recovery  */
+            | statement LETTERS error '.' 		{ 	
+													if ( !gErrorOut ) {
+														ScanError( "error in the definition of the units for '%s'", $2, 0 ); 
+													}
+													gErrorOut = FALSE;
+													fprintf( stderr, "# error in the definition of units recovered\n" );
+													fprintf( stderr, "\n" );
+												}
+			| statement reaction moreinfo error '}' 	{ 
+													KillItem( gReactionList, FreeOneReaction, ListIterator( gReactionList, FindReaction, $2->label ) );
+													if ( !gErrorOut ) {
+														ScanError( "error in the additional information to the reaction labeled '%s'", $2->label , 0 ); 
+													}
+													gErrorOut = FALSE;
+													fprintf( stderr,"# error in additional information of reaction recovered\n");
+													fprintf( stderr, "\n" );
+												}
+			| statement reaction error '}' 		{ 
+													LinkPtr link = NULL;
+
+													ClearComposition( gComposition );
+													
+													KillItem( gReactionList, FreeOneReaction, ListIterator( gReactionList, FindReaction, $2->label ) );
+													
+													if ( !gErrorOut ) {
+														ScanError( "error in the definition of the reaction labeled '%s'", $2->label , 0 ); 
+													}
+													gErrorOut = FALSE;
+													fprintf( stderr,"# error in reaction recovered\n");
+													fprintf( stderr, "\n" );
+												}
+			| statement exp error '.'			{
+													if ( !gErrorOut ) {
+														ScanError( ( $2.paraCoeff ) ? "error in an exponent of the definition of units\n# the last thing i matched is %s" : 
+																				  "error in an exponent of the definition of units\n# the last thing i matched is %s%d", 
+																 $2.parameter , $2.number );
+													}
+													gErrorOut = FALSE;
+													fprintf( stderr,"# error in an exponent recovered\n");
+													fprintf( stderr, "\n" );
+												}
+           | statement error '.'	{
+										if ( !gErrorOut ) {
+											ScanError( "error in declaration", "", 0 );
+										}
+										gErrorOut = FALSE;
+										fprintf( stderr,"# error in declaration recovered\n");
+										fprintf( stderr, "\n" );
+		   							}
+		   ;
+
+/* limits of the dimension parser:	
+ * exponents have to be linear in terms of parameters
+ * only integers are allowed for exponents
+ * there should be almost one parameter for each SI-unit
+ */            
+dimension:   '(' dimension ')'           	{ 
+												$$ = $2; 
+												
+													if ( yydebug ) {
+														fprintf( stderr,"reduce dimension with parenthesis\n"); 
+													}
+											}
+            | dimension '/' dimension 		{ 
+												if ( DivideDimension( &$$, $1, $3 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"reduce dimension with '/'\n");
+													}
+											}
+            | dimension '*' dimension 		{ 
+												if ( MultiplyDimension( &$$, $1, $3 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"reduce dimension with '*'\n");
+												
+													}
+											}
+            | FACTOR dimension 				{ 
+													if ( yydebug ) {
+														fprintf( stderr,"vorher\n");
+														fprintf( stderr, "$2.value = %g\n", $2.value );
+														fprintf( stderr,"factor\n");
+														fprintf( stderr, "$1->value = %g\n", $1->value );
+													}
+												$2.value *= $1->value;
+												CopyDimension( &$$, $2 );
+												
+													if ( yydebug ) {
+														fprintf( stderr,"factor dimension\n");
+														fprintf( stderr, "$$.value = %g\n", $$.value );
+													}
+													
+											}
+            | dimension '^' exp 			{ 
+												if ( PowerDimension( &$$, $1, $3 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"dimension '^' exp\n");
+														fprintf( stderr, "$3.parameter = %s\n", $3.parameter );
+														fprintf( stderr, "$3.paraCoeff = %d\n", $3.paraCoeff );
+														fprintf( stderr, "$3.number = %d\n", $3.number );
+													}
+											}
+		    | LETTERS						{ 
+												if ( ShiftLetters( &$$, $1 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"LETTERS in dimension\n");
+											  			fprintf( stderr, "$1 = %s\n", $1 );			
+													}
+											}
+			;
+			
+	exp:	  exp '*' exp					{	
+												if ( MuliplyExponent( &$$, $1, $3 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"reduce exp with '*'\n");
+														fprintf( stderr, "$1.paraCoeff = %d\n", $1.paraCoeff );
+														fprintf( stderr, "$3.paraCoeff = %d\n", $3.paraCoeff );
+														fprintf( stderr, "$1.parameter = %s\n", $1.parameter );
+														fprintf( stderr, "$3.parameter = %s\n", $3.parameter );
+													}
+											}
+
+		  	| E_ALPHANUM E_ALPHANUM  %prec RIGHTHIGH	{	
+													if ( MuliplyExponent( &$$, $1, $2 ) ) {
+													  YYERROR;
+													}
+														if ( yydebug ) {
+															fprintf( stderr,"reduce exp with '*'\n");
+															fprintf( stderr, "$1.paraCoeff = %d\n", $1.paraCoeff );
+															fprintf( stderr, "$2.paraCoeff = %d\n", $2.paraCoeff );
+															fprintf( stderr, "$1.parameter = %s\n", $1.parameter );
+															fprintf( stderr, "$2.parameter = %s\n", $2.parameter );
+														}
+												}
+		  	| E_ALPHANUM '(' exp ')'  %prec RIGHTHIGH	{	
+													if ( MuliplyExponent( &$$, $1, $3 ) ) {
+													  YYERROR;
+													}
+														if ( yydebug ) {
+															fprintf( stderr,"reduce exp with '*'\n");
+															fprintf( stderr, "$1.paraCoeff = %d\n", $1.paraCoeff );
+															fprintf( stderr, "$3.paraCoeff = %d\n", $3.paraCoeff );
+															fprintf( stderr, "$1.parameter = %s\n", $1.parameter );
+															fprintf( stderr, "$3.parameter = %s\n", $3.parameter );
+														}
+												}
+			| exp '+' exp					{	
+												if ( AddExponent( &$$, $1, $3 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"reduce exp with '+'\n");
+													}
+											}
+
+			| exp '/' exp					{	
+												if ( DivideExponent( &$$, $1, $3 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"reduce exp with '/'\n");
+													}
+											}
+
+			| exp '-' exp					{	
+												if ( SubtractExponent( &$$, $1, $3 ) ) {
+												  YYERROR;
+											  	}
+												
+													if ( yydebug ) {
+														fprintf( stderr,"reduce exp with '-'\n");
+													}
+											}
+
+			| '(' exp ')'           		{	
+												$$ = $2;
+													if ( yydebug ) {
+														fprintf( stderr,"reduce exp with parenthesis\n");
+														fprintf( stderr, "$$.number = %d\n", $$.number );
+														fprintf( stderr, "$$.parameter = %s\n", $$.parameter );
+														fprintf( stderr, "$$.paraCoeff = %d\n", $$.paraCoeff );
+													}
+											}
+ 
+			| '-' exp %prec UNARYMINUS		{	
+												$$.number = -$2.number;
+												$$.paraCoeff = -$2.paraCoeff;
+												strcpy( $$.parameter, $2.parameter );
+													if ( yydebug ) {
+														fprintf( stderr,"reduce exp with unary '-'\n");
+														fprintf( stderr, "$$.parameter = %s\n", $$.parameter );
+														fprintf( stderr, "$$.number = %d\n", $$.number );
+														fprintf( stderr, "$$.paraCoeff = %d\n", $$.paraCoeff );
+													}
+											}
+			| E_ALPHANUM					{	
+												ShiftExponent( &$$, $1 );
+												
+													if ( yydebug ) {
+														fprintf( stderr,"E_ALPHANUM in exp\n");
+														fprintf( stderr, "$1.number = %d\n", $1.number );
+														fprintf( stderr, "$1.parameter = %s\n", $1.parameter );
+														fprintf( stderr, "$1.paraCoeff = %d\n", $1.paraCoeff );
+													}
+											}
+			;
+			
+
+/*  reaction contains a ReactionPtr to the current reaction  */
+reaction:	  LABEL							{ $$ = $1; }
+			| reaction SPECIESCOEFF SPECIES	{ PutSpeciesToReaction( $$, $3, $2 ); 
+													if ( yydebug ) {
+											  			fprintf( stderr,"SPECIESCOEFF\n"); 
+													}
+											}
+			| reaction SPECIES				{ PutSpeciesToReaction( $$, $2, 1.0 ); 
+													if ( yydebug ) {
+											  			fprintf( stderr,"SPECIES\n");
+													}
+											}
+			| reaction THIRDBODY			{ $$->withThirdBody = TRUE;
+											  $$->thirdBodyNumber = $2; }
+			| reaction EQUAL				{ $$->partialEquilibrium = TRUE;
+											  ChangeSignsOfReactionCoeffs( $$, RIGHT ); }
+			| reaction RIGHTARROW			{ ChangeSignsOfReactionCoeffs( $$, RIGHT ); }
+			| reaction LEFTARROW			{ ChangeSignsOfReactionCoeffs( $$, LEFT ); }
+			| reaction LEFTBRACE			{ ChangeSignsOfReactionCoeffs( $$, RIGHT ); 
+												if ( $2 ) {
+													if ( CheckStoichiometry( $$ ) ) { 
+															gLineContents[strlen(gLineContents)-1] = '\0';
+															ScanError( "error in stoichiometry of the reaction labeled '%s'", $$->label, 0 ); 
+															WriteCompoOfReaction( $$ );
+															YYERROR;
+													}
+												}
+											}
+			;
+
+/*  moreinfo contains a pointer to the current structitem  */
+moreinfo:	  MI_LITERAL MI_NUMBER 			{ *$1 = $2; 
+													if ( yydebug ) {
+											  			fprintf( stderr, "MI_LITERAL\n"); 
+													}
+											}
+			| moreinfo MI_LITERAL MI_NUMBER { *$2 = $3; 
+													if ( yydebug ) {
+											  			fprintf( stderr, "MI_LITERAL\n"); 
+													}
+											}
+			;
+
+
+%%
+

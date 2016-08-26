@@ -1,0 +1,6 @@
+#!/bin/csh
+foreach flamelet ( ./flamelets/* )
+	echo "\n# processing "\"$flamelet\"
+	TestFLReader -f $flamelet 
+end
+

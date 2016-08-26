@@ -1,0 +1,49 @@
+FlameMaster.h 
+ScanManStructs.h
+TCountPremFlamePhys.h
+TCountPremFlameSim.h
+TCountDiffFlameMix.h
+TCountDiffFlameSim.h
+TCountDiffPhysEigen.h
+TUnstrPremFlamePhys.h
+TTransFlameSolver.h
+TTransFlamelet.h
+
+
+
+TTransFlameSolver.C
+
+TPAH.C
+TSoot.C
+
+TCountPremFlamePhys.C
+TCountPremFlameSim.C
+
+
+TCountDiffFlamePhys.C	out
+TCountDiffFlamePhys.h	out
+TCountDiffFlameCont.C	out
+TCountDiffFlameCont.h	out
+TFlameSheet.C			out?
+TFlameSheet.h			out?
+TTrans1DIsoChor.C		out?
+TTrans1DIsoChor.h		out?
+TTrans1DIsoChorSolver.C	out?
+TTrans1DIsoChorSolver.h	out?
+
+
+
+
+Done:
+
+TProperties.C
+TReaction.C
+TSpecies.C
+TInputData.C
+TFlame.C				comments removed
+T0DIsoChor.C 			comments removed
+TCountDiffFlameSim.C 	comments removed
+TCountDiffFlameMix.C 	comments removed
+TCountDiffPhysEigen.C 	comments removed
+TUnstrPremFlamePhys.C 	comments removed
+TTransFlamelet.C 		comments removed

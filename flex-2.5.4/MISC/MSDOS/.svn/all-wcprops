@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MSDOS
+END
+djgpp.sed
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MSDOS/djgpp.sed
+END
+configur.bat
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MSDOS/configur.bat
+END
+MSC70.make
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MSDOS/MSC70.make
+END

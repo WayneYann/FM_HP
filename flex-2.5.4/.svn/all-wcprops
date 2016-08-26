@@ -1,0 +1,215 @@
+K 25
+svn:wc:ra_dav:version-url
+V 46
+/svn/flame_master/!svn/ver/13/trunk/flex-2.5.4
+END
+sym.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/sym.c
+END
+.bootstrap
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/.bootstrap
+END
+yylex.c
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/yylex.c
+END
+libmain.c
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/libmain.c
+END
+flexdef.h
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/flexdef.h
+END
+INSTALL
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/INSTALL
+END
+COPYING
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/COPYING
+END
+NEWS
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/NEWS
+END
+mkinstalldirs
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/mkinstalldirs
+END
+ccl.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/ccl.c
+END
+FlexLexer.h
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/FlexLexer.h
+END
+configure.in
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/configure.in
+END
+flex.skl
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/flex.skl
+END
+initscan.c
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/initscan.c
+END
+gen.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/gen.c
+END
+conf.in
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/conf.in
+END
+ecs.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/ecs.c
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/README
+END
+flex.1
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/flex.1
+END
+mkskel.sh
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/mkskel.sh
+END
+tblcmp.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/tblcmp.c
+END
+libyywrap.c
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/libyywrap.c
+END
+scan.c
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/scan.c
+END
+main.c
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/main.c
+END
+stamp-h
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/stamp-h
+END
+dfa.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/dfa.c
+END
+version.h
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/version.h
+END
+misc.c
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/misc.c
+END
+scan.l
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/scan.l
+END
+skel.c
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/skel.c
+END
+install.sh
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/install.sh
+END
+parse.y
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/parse.y
+END
+configure
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/configure
+END
+Makefile.in
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/Makefile.in
+END
+nfa.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/nfa.c
+END

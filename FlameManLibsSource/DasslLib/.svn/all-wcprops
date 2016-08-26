@@ -1,0 +1,35 @@
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/flame_master/!svn/ver/24/trunk/FlameManLibsSource/DasslLib
+END
+ddassl.f
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/svn/flame_master/!svn/ver/1/trunk/FlameManLibsSource/DasslLib/ddassl.f
+END
+daux.f
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/svn/flame_master/!svn/ver/1/trunk/FlameManLibsSource/DasslLib/daux.f
+END
+dlinpk.f
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/svn/flame_master/!svn/ver/1/trunk/FlameManLibsSource/DasslLib/dlinpk.f
+END
+dassl.h
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/svn/flame_master/!svn/ver/1/trunk/FlameManLibsSource/DasslLib/dassl.h
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/flame_master/!svn/ver/24/trunk/FlameManLibsSource/DasslLib/Makefile
+END

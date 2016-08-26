@@ -1,0 +1,276 @@
+# Heptane mechanism from Liu, S., Hewson, J. C., Chen, J. H., Pitsch, H.: 'Effects
+#  on Strain Rate on High-Pressure Nonpremixed N-Heptane Autoignition in Counterflow',
+#  accepted for publication in Comb. Flame, 2003
+
+# version from 04/30/02
+# improved version of mbosaeshort
+# mechanism compares very well with Pitz' mechanism 
+
+
+let allowed atoms be c, h, o, N.
+let additional species be N2.
+let temperature exponent be n_k.
+let order of reaction be n.
+let units for A be [ cm^(3(n-1)) / ( s * mole^(n-1) * K^n_k ) ] .
+let units for E be [ kJ / mole ].
+
+#P      01.   H2-O2 React. (no HO2, H2O2)                                      
+1f: O2 + H            -> OH + O                { a = 2.000E+14	n = 0	E = 70.3	}
+2f: H2 + O            -> OH + H                { a = 5.060E+04	n = 2.67	E = 26.3	}
+3f: H2 + OH           -> H2O + H               { a = 1.000E+08	n = 1.6	E = 13.8	}
+4f: OH + OH           -> H2O + O               { a = 1.500E+09	n = 1.14	E = 0.42	}
+
+#P      02.   Recombination Reactions                                          
+5f: H + H + M'        -> H2 + M'               { a = 1.800E+18	n = -1	E = 0	}
+6f: O + O + M'        -> O2 + M'               { a = 2.900E+17	n = -1	E = 0	}
+7f: H + OH + M'       -> H2O + M'              { a = 2.200E+22	n = -2	E = 0	}
+
+#P      03.   HO2 Formation/Consumption                                        
+8f: H + O2 + M'       -> HO2 + M'              { a = 2.300E+18	n = -0.8	E = 0	}
+9f: HO2 + H           -> OH + OH               { a = 1.500E+14	n = 0	E = 4.2	}
+10f: HO2 + H          -> H2 + O2               { a = 2.500E+13	n = 0	E = 2.9	}
+11f: HO2 + H          -> H2O + O               { a = 3.000E+13	n = 0	E = 7.2	}
+12f: HO2 + O          -> OH + O2               { a = 1.800E+13	n = 0	E = -1.7	}
+13f: HO2 + OH         -> H2O + O2              { a = 6.000E+13	n = 0	E = 0	}
+
+#P      04.   HO2 Formation/Consumption                                        
+14f: HO2 + HO2        -> H2O2 + O2             { a = 2.500E+11	n = 0	E = -5.2	}
+15f: OH + OH + M'     -> H2O2 + M'             { a = 3.250E+22	n = -2	E = 0	}
+19f: H2O2 + OH        -> H2O + HO2             { a = 5.400E+12	n = 0	E = 4.2	}
+
+#P      05.   CO REACTIONS                                                     
+20f: CO + OH          -> CO2 + H               { a = 6.000E+06	n = 1.5	E = -3.1	}
+21f: CO + HO2         -> CO2 + OH              { a = 1.500E+14	n = 0	E = 98.7	}
+22f: CO + O + M'      -> CO2 + M'              { a = 7.100E+13	n = 0	E = -19	}
+
+#P      10.   CH Reactions                                                     
+25: CH + O2          -> HCO + O               { a = 6.000E+13	n = 0	E = 0	}
+26: CH + CO2         -> HCO + CO              { a = 3.400E+12	n = 0	E = 2.9	}
+27f: CH + H2O         -> CH2OH		            { a = 5.700E+12	n = 0	E = -3.2	}
+
+#P      11.   HCO REACTIONS                                                    
+28f: HCO + M'         -> CO + H + M'           { a = 1.566E+14	n = 0	E = 65.93	}
+### reaction HCO + O2         -> CO + HO2 very important for very high temperature
+33f: HCO + O2         -> CO + HO2              { a = 3.000E+12	n = 0	E = 0	}
+
+#P      12.   CH2 Reactions                                                    
+35f: 3-CH2 + H        -> CH + H2               { a = 6.000E+12	n = 0	E = -7.5	}
+# different from SAE
+37f: 3-CH2 + 3-CH2    -> C2H2 + H2             { a = 1.200E+13	n = 0	E = 3.4	}
+39f: 3-CH2 + CH3      -> C2H4 + H              { a = 4.200E+13	n = 0	E = 0	}
+40f: 3-CH2 + O2       -> CO + OH + H           { a = 1.300E+13	n = 0	E = 6.2	}
+41f: 3-CH2 + O2       -> CO2 + H2              { a = 1.200E+13	n = 0	E = 6.2	}
+42f: 1-CH2 + M'       -> 3-CH2 + M'            { a = 1.200E+13	n = 0	E = 0	}
+43f: 1-CH2 + O2       -> CO + OH + H           { a = 3.100E+13	n = 0	E = 0	}
+44f: 1-CH2 + H2       -> CH3 + H               { a = 7.200E+13	n = 0	E = 0	}
+
+#P      13.   CH2O Reactions                                                   
+45f: CH2O + M'        -> HCO + H + M'          { a = 5.000E+16	n = 0	E = 320	}
+46f: CH2O + H         -> HCO + H2              { a = 2.300E+10	n = 1.05	E = 13.7	}
+# in addition to SAE
+47f: CH2O + O         -> HCO + OH              { a = 4.150E+11	n = 0.57	E = 11.6	}
+48f: CH2O + OH        -> HCO + H2O             { a = 3.400E+09	n = 1.2	E = -1.9	}
+### reaction CH2O + HO2       -> HCO + H2O2 important for high temperature
+# high sensitivity to CO in lean PFR, but not for C2H4
+49f: CH2O + HO2       -> HCO + H2O2            { a = 3.000E+12	n = 0	E = 54.7	}
+
+#P      14.   CH3 Reactions                                                    
+53f: CH3 + O          -> CH2O + H              { a = 8.430E+13	n = 0	E = 0	}
+a34f: CH3 + H           -> CH4                   { ai = 2.108E+14   ni = 0   Ei = 0 
+                                                 a = 6.257E+23   n = -1.8   E = 0 
+                                                 fca = 0.577000 fcta = 2370.00 }
+55: CH3 + OH          -> CH3O + H              { a = 2.260E+14	n = 0	E = 64.8	}
+57: CH3 + O2          -> CH2O + OH             { a = 3.300E+11	n = 0	E = 37.4	}
+# in addition to SAE
+58f: CH3 + HO2        -> CH3O + OH             { a = 1.800E+13	n = 0	E = 0	}
+# in addition to SAE
+59f: CH3 + HO2        -> CH4 + O2              { a = 3.600E+12	n = 0	E = 0	}
+60: CH3 + CH3         -> C2H4 + H2             { a = 1.000E+16	n = 0	E = 134	}
+36f: CH3 + CH3         -> C2H6                  { ai = 1.813E+13   ni = 0    Ei = 0 
+                                                 a = 1.272E+41   n = -7    E = 11.56 
+                                                 fca = 0.380000 fcta = 73.0000  
+												fcb = 0.620000 fctb = 1180.00 }
+
+#P      15a.   CH3O Reactions                                                  
+62f: CH3O + M'        -> CH2O + H + M'         { a = 5.000E+13	n = 0	E = 105	}
+63f: CH3O + H         -> CH2O + H2             { a = 1.800E+13	n = 0	E = 0	}
+# in addition to SAE
+64f: CH3O + O2        -> CH2O + HO2            { a = 4.000E+10	n = 0	E = 8.9	}
+
+#P      15b.   CH2OH Reactions                                                 
+69f: CH2OH + M'       -> CH2O + H + M'         { a = 5.000E+13	n = 0	E = 105	}
+70f: CH2OH + H        -> CH2O + H2             { a = 3.000E+13	n = 0	E = 0	}
+71f: CH2OH + O2       -> CH2O + HO2            { a = 1.000E+13	n = 0	E = 30	}
+
+#P      17.   CH4 Reactions                                                    
+84f: CH4 + H          -> H2 + CH3              { a = 1.300E+04	n = 3	E = 33.6	}
+86f: CH4 + OH         -> H2O + CH3             { a = 1.600E+07	n = 1.83	E = 11.6	}
+
+#P     20A.    HCCO REACTIONS                                         
+105f: HCCO + H        -> 3-CH2 + CO            { a = 1.500E+14	n = 0	E = 0	}
+106: HCCO + O         -> CO + CO + H           { a = 9.600E+13	n = 0	E = 0	}
+
+#P     21.    C2H2 REACTIONS                                          
+109f: C2H2 + O2       -> HCCO + OH             { a = 2.000E+08	n = 1.5	E = 126	}
+111f: C2H2 + O        -> 3-CH2 + CO            { a = 1.720E+04	n = 2.8	E = 2.1	}
+112f: C2H2 + O        -> HCCO + H              { a = 1.720E+04	n = 2.8	E = 2.1	}
+
+#P     25.    C2H3 REACTIONS                                          
+a51f:C2H3 -> C2H2 + H 			{ ai = 2.e14	a = 1.187e42	ni = 0	n = -7.5	
+								Ei = 166.29	E = 190.4 
+								fcc = 0.35 }
+a125: C2H3 + O2       -> CH2O + HCO           { a = 5.420e+12	n = 0	E = 0	}
+
+#P    23.    C2H4 REACTIONS                                          
+129f: C2H4 + M'       -> C2H2 + H2 + M'        { a = 2.500E+17	n = 0	E = 319.8	}
+131f: C2H4 + H        -> C2H3 + H2             { a = 1.700E+15	n = 0	E = 62.9	}
+# changed from 2.05e13 to 6.500E+13
+# setting to original value tig too high for phi=1,2 in high temp regime
+# setting to even higher does not change anything
+134f: C2H4 + OH       -> C2H3 + H2O            { a = 6.500E+13	n = 0	E = 24.9	}
+#134f: C2H4 + OH       -> C2H3 + H2O            { a = 2.050E+13	n = 0	E = 24.9	}
+
+
+#P     24.   C2H5 REACTIONS                                           
+a58f:C2H5 -> C2H4 + H 			{ ai = 1.3e13	a = 1.e16	ni = 0	n = 0	Ei = 167	E = 126	
+								fcc = 0.411000 fctc = 73.4000 
+								fca = 1.0 fcta = 422.800 }
+146f: C2H5 + H        -> CH3 + CH3             { a = 3.000E+13	n = 0	E = 0	}
+149f: C2H5 + O2       -> C2H4 + HO2            { a = 1.100E+10	n = 0	E = -6.3	}
+
+#P     25.   C2H6 REACTIONS                                           
+164: C2H6 + H        -> C2H5 + H2             { a = 1.400E+09	n = 1.5	E = 31.1	}
+166: C2H6 + OH       -> C2H5 + H2O            { a = 7.200E+06	n = 2	E = 3.6	}
+170: C2H6 + CH3      -> C2H5 + CH4            { a = 1.500E-07	n = 6	E = 25.4	}
+
+#P      31.   C3H3 Reactions                                                   
+
+#P      32.   C3H4 Reactions                                                   
+189: C3H4 + OH       -> CH2O + C2H3           { a = 1.000E+12	n = 0	E = 0	}
+190: C3H4 + OH       -> HCO + C2H4            { a = 1.000E+12	n = 0	E = 0	}
+
+#P      33.   C3H5 Reactions                                                   
+191f: C3H5            -> C3H4 + H              { a = 3.980E+13	n = 0	E = 293.1	}
+# following reaction changed from 1.0e13 to 0.5e12. This improves rich PSR and leaves lean PSR and ign del unchanged
+192f: C3H5 + H        -> C3H4 + H2             { a = 0.500E+13	n = 0	E = 0	}
+193f: C3H5 + O2       -> C3H4 + HO2            { a = 6.000E+11	n = 0	E = 41.9	}
+
+#P      34.   C3H6 Reactions                                                   
+195f: C3H6            -> C2H3 + CH3            { a = 3.150E+15	n = 0	E = 359	}
+196f: C3H6 + H        -> C3H5 + H2             { a = 5.000E+12	n = 0	E = 6.3	}
+# in addition to SAE
+# increasing does not really change CO in lean PSR
+200f: C3H6 + OH       -> C2H5 + CH2O           { a = 7.900E+12	n = 0	E = 0	}
+# in addition to SAE
+202f: C3H6 + OH       -> C3H5 + H2O            { a = 4.000E+12	n = 0	E = 0	}
+# rate following tsang to products path 1991
+#202f: C3H6 + OH       -> C3H5 + H2O            { a = 1.000E+12	n = 0	E = -4.19	}
+203: C3H6 + CH3      -> C3H5 + CH4            { a = 8.960E+12	n = 0	E = 35.6	}
+#204f: C3H6 + O2      -> C3H5 + HO2            { a = 1.000E+13	n = 0	E = 199.1	}
+#a204f: C3H6 + O      -> C3H5 + OH            { a = 1.850E+10	n = 0.7	E = 31.94	}
+#aa204f: C3H6 + O      -> CH2CO + CH3 + H            { a = 3.70E+10	n = 0.7	E = 24.619	}
+#aaa204f: C3H6 + O      -> C2H5+HCO            { a = 1.850E+10	n = 0.7	E = 37.49	}
+
+#P      35a.   n-C3H7 Reactions                                                
+205f: N-C3H7          -> CH3 + C2H4            { a = 9.600E+13	n = 0	E = 129.8	}
+206f: N-C3H7          -> H + C3H6              { a = 1.250E+14	n = 0	E = 154.9	}
+207f: N-C3H7 + O2     -> C3H6 + HO2            { a = 1.000E+12	n = 0	E = 20.9	}
+
+#P      42.   1-C4H8 REACTIONS                                                 
+# in addition to SAE
+255f: 1-C4H8          -> C3H5 + CH3            { a = 8.000E+16	n = 0	E = 307.4	}
+# in addition to SAE
+265f: 1-C4H8 + OH     -> N-C3H7 + CH2O         { a = 6.500E+12	n = 0	E = 0	}
+
+#P      43.   P-C4H9 REACTIONS                                                 
+292: P-C4H9          -> C2H5 + C2H4           { a = 2.500E+13	n = 0	E = 120.6	}
+
+#P      44.   1-C5H11 REACTIONS                                                 
+349: 1-C5H11          -> C2H4 + N-C3H7         { a = 3.200E+13	n = 0	E = 118.9	}
+
+#P      6.1 C6H11 Consumption
+# in addition to SAE
+353: C6H11            -> C3H5 + C3H6           { a = 2.500E+13	n = 0	E = 125.6	}
+
+#P      6.2 C6H12 Consumption
+# in addition to SAE
+355: 1-C6H12          -> N-C3H7 + C3H5         { a = 2.500E+16	n = 0	E = 297.7	}
+# in addition to SAE
+357: 1-C6H12 + H      -> C6H11 + H2            { a = 5.000E+12	n = 0	E = 0	}
+# in addition to SAE
+385: 1-C6H12 + OH     -> C6H11 + H2O           { a = 5.000E+12	n = 0	E = 0	}
+
+#P    16.    C7H15 REACTIONS                                           
+n192: 1-C7H15           -> 1-C5H11 + C2H4  { a = 2.500E+13   n = 0    E = 120.6 }
+n193: 2-C7H15           -> p-C4H9 + C3H6   { a = 1.600E+13   n = 0    E = 118.5 }
+# in addition to SAE
+n194: 2-C7H15           -> 1-C6H12 + CH3         { a = 4.000E+13	n = 0	E = 138.2	}
+
+#P      45.   Heptyl Isomerization                                                 
+477: 1-C7H15          -> 2-C7H15               { a = 2.000E+11	n = 0	E = 75.8	}
+478: 2-C7H15          -> 1-C7H15               { a = 3.000E+11	n = 0	E = 88.4	}
+
+#P      78.   N-C7H16 REACTIONS
+n196: N-C7H16           -> p-C4H9 + n-C3H7       { a = 3.160E+16   n = 0    E = 339.2 }
+
+n197: N-C7H16 + H       -> 1-C7H15 + H2          { a = 7.300E+07   n = 2    E = 32.2 }
+n198: N-C7H16 + H       -> 2-C7H15 + H2          { a = 3.500E+07 	n = 2	E = 20.9 }
+
+n201: N-C7H16 + OH      -> 1-C7H15 + H2O         { a = 10.560E+09   n = 1.1    E = 7.6 }
+n202: N-C7H16 + OH      -> 2-C7H15 + H2O         { a = 5.200E+09	n = 1.3	E = 2.9	}
+
+n209: N-C7H16 + HO2     -> 1-C7H15 + H2O2        { a = 1.790E+13   n = 0    E = 81.2 }
+n210: N-C7H16 + HO2     -> 2-C7H15 + H2O2        { a = 13.400E+12	n = 0	E = 71.2 }
+
+n217: N-C7H16 + O2      -> 1-C7H15 + HO2          { a = 5.500E+13   n = 0    E = 205.2 }
+n218: N-C7H16 + O2      -> 2-C7H15 + HO2          { a = 8.000E+13	n = 0	E = 199.3 }
+
+# *****************************************
+#   Low Temperature Branch simplified by UIC #
+# *****************************************
+
+# different from SAE: backward reactions of first O2 addition changed from 1.4e15 to 1.75e15
+i66f: 1-C7H15 + O2     -> 1C7H15O2-C7H15O2      { a = 2.000E+12	n = 0	E = 0	}
+i66b: 1C7H15O2-C7H15O2 -> 1-C7H15 + O2          { a = 1.750E+15	n = 0	E = 117.3	}
+i67f: 2-C7H15 + O2     -> 1C7H15O2-C7H15O2      { a = 2.000E+12	n = 0	E = 0	}
+i67b: 1C7H15O2-C7H15O2 -> 2-C7H15 + O2          { a = 1.750E+15	n = 0	E = 117.3	}
+i68: 1C7H15O2-C7H15O2 -> 1HEOOH-2-C7H15O2      { a = 6.000E+11	n = 0	E = 85.6	}
+i69: 1HEOOH-2-C7H15O2 + O2 -> 2OO7OOH1-O2C7H15O2 { a = 5.000E+11  n = 0	 E = 0	}
+i70: 2OO7OOH1-O2C7H15O2 -> 1-2HEOOH-O2C7H14OOH { a = 2.000E+11	n = 0	E = 71.2	}
+i71: 1-2HEOOH-O2C7H14OOH -> OC7OOH-OC7H13OOH + OH { a = 1.000E+09	n = 0	E = 31.4	}
+i72: OC7OOH-OC7H13OOH -> 1-2HEPOO-OC7H13O + OH { a = 8.400E+14	n = 0	E = 180.1	}
+i73: 1-2HEPOO-OC7H13O -> CH2O + 1-C5H11 + CO { a = 2.000E+13	n = 0	E = 62.8	}
+
+/*l221f: 1-C7H15 + O2      -> 1C7H15O2-C7H15O2      { a = 2.000E+12   n = 0    E = 0 }
+l221b: 1C7H15O2-C7H15O2  -> 1-C7H15 + O2          { a = 1.400E+15   n = 0    E = 117.3 }
+l222f: 2-C7H15 + O2      -> 2C7H15O2-C7H15O2      { a = 2.000E+12   n = 0    E = 0 }
+l222b: 2C7H15O2-C7H15O2  -> 2-C7H15 + O2          { a = 1.400E+15   n = 0    E = 117.3 }
+l223f: 3-C7H15 + O2      -> 3C7H15O2-C7H15O2      { a = 2.000E+12   n = 0    E = 0 }
+l223b: 3C7H15O2-C7H15O2  -> 3-C7H15 + O2          { a = 1.400E+15   n = 0    E = 117.3 }
+l224f: 4-C7H15 + O2      -> 4C7H15O2-C7H15O2      { a = 2.000E+12   n = 0    E = 0 }
+l224b: 4C7H15O2-C7H15O2  -> 4-C7H15 + O2          { a = 1.400E+15   n = 0    E = 117.3 }
+
+l225f: 1C7H15O2-C7H15O2  -> 1HEOOH-2-C7H15O2      { a = 2.000E+11   n = 0    E = 71.2 }
+l225b: 1HEOOH-2-C7H15O2  -> 1C7H15O2-C7H15O2      { a = 1.000E+11   n = 0    E = 52.3 }
+l226f: 2C7H15O2-C7H15O2  -> 2HEOOH-1-C7H15O2      { a = 2.000E+11   n = 0    E = 46.5 }
+l226b: 2HEOOH-1-C7H15O2  -> 2C7H15O2-C7H15O2      { a = 1.000E+11   n = 0    E = 27.6 }
+l227f: 3C7H15O2-C7H15O2  -> 3HEOOH-2-C7H15O2      { a = 2.000E+11   n = 0    E = 71.2 }
+l227b: 3HEOOH-2-C7H15O2  -> 3C7H15O2-C7H15O2      { a = 1.000E+11   n = 0    E = 52.3 }
+l228f: 4C7H15O2-C7H15O2  -> 4HEOOH-1-C7H15O2      { a = 2.000E+11   n = 0    E = 46.5 }
+l228b: 4HEOOH-1-C7H15O2  -> 4C7H15O2-C7H15O2      { a = 1.000E+11   n = 0    E = 27.6 }
+
+l229: 1HEOOH-2-C7H15O2 + O2 -> OOC7OOH-O2C7H14OOH { a = 5.000E+11   n = 0    E = 0 }
+l230: 2HEOOH-1-C7H15O2 + O2 -> OOC7OOH-O2C7H14OOH { a = 5.000E+11   n = 0    E = 0 }
+l231: 3HEOOH-2-C7H15O2 + O2 -> OOC7OOH-O2C7H14OOH { a = 5.000E+11   n = 0    E = 0 }
+l232: 4HEOOH-1-C7H15O2 + O2 -> OOC7OOH-O2C7H14OOH { a = 5.000E+11   n = 0    E = 0 }
+
+l233: OOC7OOH-O2C7H14OOH -> HOOC7OOH-HOOC7H13OOH { a = 2.000E+11   n = 0    E = 71.2 }
+l234: HOOC7OOH-HOOC7H13OOH -> OC7OOH-OC7H13OOH + OH { a = 1.000E+09   n = 0    E = 31.4 }
+l235: OC7OOH-OC7H13OOH  -> OC7H13O + OH          { a = 1.000E+14   n = 0    E = 180.1 }
+l236: OC7H13O           -> CH2O + 1-C5H11 + CO   { a = 2.000E+13   n = 0    E = 62.8 }
+*/
+
+let [M'] =   3.00 [N-C7H16] + 1.00 [H2] + 3.00 [CH4] + 0.75 [CO] + 0.40 [N2] +
+             6.50 [H2O] + 0.40 [O2] + 1.0 OTHERS.
+#let [M'] =   3.00 [N-C7H16] + 1.00 [H2] + 0.75 [CO] + 0.40 [N2] +
+#             6.50 [H2O] + 0.40 [O2].

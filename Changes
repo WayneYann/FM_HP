@@ -1,0 +1,30 @@
+sometime 
+CK2FM added
+
+04/26/01 
+function UpperString added to CreateBinFile
+
+04/26/01 
+T0DIsoChor changed to split large output files to approx. 200 cols
+
+08/21/01 
+Bugfix in evaluation of pressure dependent rate coefficient in TReaction.C if TROE is defined
+
+02/20/02
+New version 3.0 including some bug fixes, and a new radiation model. 
+Code generation of steady state relations with pressure dependent reactions bug fixed
+ScanMan now outputs clean CHEMKIN input files
+Makefiles for Mac OSX added
+
+10/28/03
+Updated the headers to the new C++ Standard.
+
+10/06/05
+some minor bug fixes
+improved sensitivity analysis for homogeneous reactors 
+new second order numerical Jacobian to improve convergence for unstretched flames 
+
+6/6/08
+Version 3.31
+Few bug fixes that should make installation easier (not change any results)
+More support for generating flamelet libraries.

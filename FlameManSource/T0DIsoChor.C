@@ -1,0 +1,3762 @@
+#include "FlameMaster.h"
+#include "T0DIsoChor.h"
+
+#define CVODE
+
+#ifndef CVODE
+#include "dassl.h"
+#endif
+
+#undef WRITEEQUILIBRIUM // writes equilibrium value as the final time solution in the output file
+
+// alternative criteria for computing the ignition delay time
+#undef IGNDELTEMPBOUND
+#undef IGNDELFUEL
+#define IG_CRIT_CH // this is used only to identify when solution could be stopped, not to compute ignition delay time
+
+#define MAXSTEP 0.001 // maximum stepsize for time integration
+
+void T0DIsoChor::InitT0DIsoChor (void)
+{
+  int i;
+
+  if (fSensObjAll)
+    {
+      fNSensObj = fSpecies->GetNSpeciesInSystem ();
+      fSensObj = new char *[fNSensObj];
+      for (int i = 0; i < fNSensObj; i++)
+	{
+	  fSensObj[i] = fSpecies->GetNames ()[i];
+	}
+    }
+
+  if (fInputData->fFlameType == kHomoIsoChor)
+    {
+      fType = kHomoIsoChor;
+#ifdef CVODE
+      HomoResFuncCV = Res0DIsoChorCV;
+#else
+      HomoResFunc = Res0DIsoChor;
+#endif
+
+      fTempDiff = FALSE; 
+    }
+	else {
+      fType = kHomoIsoBar;
+#ifdef CVODE
+      HomoResFuncCV = Res0DIsoBarCV;
+#else
+      HomoResFunc = Res0DIsoBar;
+#endif
+      fTempDiff = TRUE; 
+    }
+
+  fKeepMassFracs = fInputData->fKeepMassFracs;
+
+  fWriteSolution = fInputData->fWriteEverySolution;
+  fAdditionalOutput = fInputData->fAdditionalOutput;
+  fEquidistant = fInputData->fEquidistant;
+
+
+  int nOfSpecies = fSpecies->GetNOfSpecies ();
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+
+  fPrintMolarFractions = fInputData->fPrintMolarFractions;
+
+  fEGR = fInputData->fParameterComm;
+  fCHMax = 0.0;
+  fCH = fInputData->FindSpecies ("CH");
+
+  fTStart = fInputData->fStart;
+  fTEnd =
+    (fabs (fInputData->fEnd) >
+     fabs (fInputData->fStart)) ? fInputData->fEnd : 1.0e3;
+
+  // Impose integration through fTend
+  if (fTEnd < 0)
+    {
+      fTEnd = fabs (fTEnd);
+      fImposeTEnd = TRUE;
+      printf ("Imposing integration until TEnd = %f\n", fTEnd);
+    }
+  else if (fSensFinal)
+    {
+      fImposeTEnd = TRUE;
+      printf ("Imposing integration until TEnd = %f\n", fTEnd);
+    }
+  else
+    {
+      fImposeTEnd = FALSE;
+    }
+
+  fNOutput = (fInputData->fNOutputs > 0) ? fInputData->fNOutputs : 100;
+
+  if (!fEquidistant)
+    {
+      fNOutput = (2 * fNOutput + 1);
+    }
+
+  fTime = fTStart;
+  fDeltaT = (fTEnd - fTStart) / (fNOutput - 1);
+  fTout = fDeltaT;
+
+ 
+  fNOfEquations = nOfSpeciesIn + fVariablesWithoutSpecies;
+
+  fActLength = 0;
+  fDeltaStepSave = 1;
+  fMaxStepSize = 0.0;
+
+  fSolution = NewVector (fNOfEquations);
+  fSolPrime = NewVector (fNOfEquations);
+
+  fSolTime = NewVector (fNOutput);
+  fSolMassFracs = NewMatrix (nOfSpecies, fNOutput, kColumnPointers);
+  fSolTemp = NewVector (fNOutput);
+	if ( fSoot ) {
+		fSolSootMoments = NewMatrix( fSoot->GetNSootMoments(), fNOutput, kColumnPointers );
+	}
+	else {
+		fSolSootMoments = NULL;
+	}
+
+	if ( fSoot ) {
+		fSoot->SetMomentsOffset( fSootMoments );
+	}
+
+  if (fAdditionalOutput)
+    {
+      fConsPro = NewMatrix (3 * nOfSpeciesIn, fNOutput, kColumnPointers);
+      fEpsilonM1 = NewMatrix (nOfSpeciesIn, fNOutput, kColumnPointers);
+      fHeatRelease = NewVector (fNOutput);
+
+      fDetProdRate =
+	NewMatrix (GetLenOfDetProdRate (fSensObj, fNSensObj), fNOutput,
+		   kColumnPointers);
+      fReacRateSave =
+	NewMatrix (fReaction->GetNOfReactions (), fNOutput, kColumnPointers);
+
+      //PP
+      fHeatRelSave =
+	NewMatrix (fReaction->GetNOfReactions (), fNOutput, kColumnPointers);
+      //PP
+    }
+  else
+    {
+      fConsPro = NULL;
+      fEpsilonM1 = NULL;
+      fHeatRelease = NULL;
+      fDetProdRate = NULL;
+      fReacRateSave = NULL;
+
+      //PP
+      fHeatRelSave = NULL;
+      //PP
+
+    }
+
+  fInitialTemp =
+    fInputData->fInitialCond->fValue[fInputData->fTemperatureOffset];
+
+  int nTemps = (fContInc) ?
+    (int) ((fContBound - fInitialTemp) / fContInc + 1.1) : 1;
+
+  if (fInitialTemp && fInitialTemp < 100.0) {
+      if (fContInc > 100.0 || fContBound > 100.0) {
+	    cerr <<
+	      "#error: increment for temperature continutation seems to be wrong: "
+	      << fContInc << NEWL;
+	    exit (2);
+	  }
+      fInvInitialTemp = TRUE;
+      fInitialTemp = 1000.0 / fInitialTemp;
+      if (fContBound)
+	    fContBound = 1000.0 / fContBound;
+    }
+  else
+    {
+      fInvInitialTemp = FALSE;
+    }
+
+  int nPhies = GetNOfPhi ();
+  if (nTemps <= 0)
+    {
+      cerr << "#error: number of initial temperatures is " << nTemps << NEWL;
+      exit (2);
+    }
+  if (nPhies <= 0)
+    {
+      cerr << "#error: number of initial equivalence ratios is " << nPhies <<
+	NEWL;
+      exit (2);
+    }
+  fIgnDelTimes =
+    NewTensor (fPressure->phys_len, nTemps, nPhies, kColumnPointers);
+  fIgnDelTimesFirstStage =
+     NewTensor (fPressure->phys_len, nTemps, nPhies, kColumnPointers);
+
+  for (i = 0; i < fIgnDelTimes->planes; ++i)
+    {
+      for (int j = 0; j < fIgnDelTimes->cols; ++j)
+	{
+	  for (int k = 0; k < fIgnDelTimes->rows; ++k)
+	    {
+	      fIgnDelTimes->tensor[i][j][k] = -1.0e-9;
+	      fIgnDelTimesFirstStage->tensor[i][j][k] = -1.0e-9;
+	    }
+	}
+    }
+
+  fIgnDelTimes->planes = fIgnDelTimes->rows = fIgnDelTimes->cols = 0;
+  fIgnDelTimesFirstStage->planes = fIgnDelTimesFirstStage->rows = fIgnDelTimesFirstStage->cols = 0;
+
+  fArtificialSource = fInputData->fArtificialSource;
+
+
+  // Initialization of sensitivity analysis
+
+  if (fSensAnalSpec || fSensAnalReac)
+    {
+
+      if (fSensAnalSpec && fSensAnalReac)
+	{
+	  printf
+	    ("Error : cannot have both SensAnalSpec and fSensAnalReac\n");
+	  exit (2);
+	}
+
+      fSensAnal = TRUE;
+
+
+      // Initalization of sensitivity analysis on species
+      if (fSensAnalSpec)
+	{
+
+	  // Save each pre-exponential coefficient A
+	  fSaveAllRates = NewVector (fReaction->GetNOfReactions ());
+	  for (i = 0; i < fReaction->GetNOfReactions (); ++i)
+	    {
+	      fSaveAllRates->vec[i] = fReaction->GetA ()->vec[i];
+	    }
+
+	  // Index of current species being analysed - must be negative for the first step
+	  fDistFreqFac = -1;
+
+	  // Analysis on species whose index is greater than fFirstSensRate. 
+	  fFirstSensRate = maxint (fInputData->fNUnPhysChain, 0);
+
+
+	  // Test if fFirstSensRate is not too large
+	  // max is NSpeciesInSystem 
+	  if (fFirstSensRate > fSpecies->GetNSpeciesInSystem ())
+	    {
+	      fprintf (stderr,"###error: firstSensRate larger than number of Species \n");
+	      exit (2);
+	    }
+	  // print first species to be analysed on the screen
+	  fprintf (stderr, "start sensitivity analysis with species %s\n",
+		   fSpecies->GetNames ()[fFirstSensRate]);
+
+	  // create matrix of size the total number of species to be analysed  x (2+2*fNSensObj)
+	  // [Tig, effect on final value of T, effect on max Y of targets SensObj, effect on final value of targets SensObj]
+	  fSensCoeffs =
+	    NewMatrix (fSpecies->GetNSpeciesInSystem () - fFirstSensRate,
+		       (2 + 2 * fNSensObj), kColumnPointers);
+	}		
+      
+
+      // Initalization of sensitivity analysis on reactions
+      else if (fSensAnalReac)
+	{
+
+	  // Index of current thing being analysed - must be negative for the first step  
+	  fDistFreqFac = -1;
+
+	  // Analysis on reactions whose index is greater than fFirstSensRate
+	  // If partial analysis, index is related to analysed objects
+	  fFirstSensRate = maxint (fInputData->fNUnPhysChain, 0);
+
+	  // Test if fFirstSensRate is not too large
+	  // max is the number of PartialObj (reactions) or NOfReactions
+	  if (fFirstSensRate > fReaction->GetNOfReactions () )
+	    {
+	      fprintf (stderr, "###error: firstSensRate larger than number of Reactions\n");
+	      exit (2);
+	    }
+	  // print label of first reaction to be analysed on the screen
+	  fprintf (stderr, "start sensitivity analysis with reaction %s\n",
+		   fReaction->GetLabels ()[fFirstSensRate]);
+	  // create matrix of size the total number of reactions to be analysed  x (1+2*fNSensObj)
+	  // [Tig, effect on final value of T, effect on max Y of targets SensObj, effect on final value of targets SensObj]
+	  fSensCoeffs = NewMatrix ( fReaction->GetNOfReactions () - fFirstSensRate,
+				    (2 + 2 * fNSensObj), kColumnPointers);
+	}		       
+
+      // Create vector which will contain reference data from original computation
+      fDataRef = NewVector (2 + 3 * fNSensObj);
+
+    }	
+
+  // End of Initialization of sensitivity analysis #####################
+
+  if ( fTempDiff == TRUE ) {
+    fSaveMoleFracDiff = NewMatrix( nOfSpecies, nTemps, kColumnPointers );
+    fSaveTempDiff = NewVector( nTemps );
+  }
+
+
+  fVariableNames = new String[fVariablesWithoutSpecies + nOfSpeciesIn];
+
+  fVariableNames[fTemperature] = new char[2];
+  strcpy (fVariableNames[fTemperature], "T");
+  for (i = 0; i < nOfSpeciesIn; ++i) {
+      fVariableNames[fFirstSpecies + i] =
+	  new char[strlen (fSpecies->GetNames ()[i]) + 1];
+      strcpy (fVariableNames[fFirstSpecies + i], fSpecies->GetNames ()[i]);
+  }
+	if ( fSoot ) {
+		for ( i = 0; i < fSoot->GetNSootMoments(); ++i ) {
+			fVariableNames[fSootMoments + i] = new char[8];
+			sprintf( fVariableNames[fSootMoments + i], "M%d", i );
+		}
+	}
+
+
+  SetInitialConditions (fSolution->vec, fInputData);
+  fRTol = (fInputData->fTolRes > 0.0) ? fInputData->fTolRes : 1.0e-4;
+  fATol = (fInputData->fTolDy > 0.0) ? fInputData->fTolDy : 1.0e-11;
+
+#ifdef CVODE
+	fNActualStep = &fNActualStepCV;
+	fNActualOrd = &fNActualOrdCV;
+
+	InitCVODE();
+#else
+// dassl stuff
+  fMaxOrd = 5;
+  fInfo = New1DIntArray (16);
+  SetInfo ();
+  fLRW = 40 + (fMaxOrd + 4) * fNOfEquations + fNOfEquations * fNOfEquations;
+  fLIW = 20 + fNOfEquations;
+  fRWork = New1DArray (fLRW);
+  fIWork = New1DIntArray (fLIW);
+  InitDasslWorkSpace ();
+
+  fNActualStep = &fIWork[11 - 1];
+  fNActualOrd = &fIWork[8 - 1];
+  //    variables used for udassl
+  fIsen = New1DIntArray (6);
+  fIsen[0] = 0;
+  fRTolS = fRTol;
+  fATolS = fATol;
+  fLSW = 40 + (fMaxOrd + 4) * fNOfEquations + fNOfEquations * fNOfEquations;
+  fLISW = 20 + fNOfEquations;
+  fSWork = New1DArray (fLSW);
+  fISWork = New1DIntArray (fLISW);
+// end dassl stuff
+#endif
+
+	SaveSolution (0, fTime, fSolution->vec, TRUE);
+
+}
+
+T0DIsoChor::~T0DIsoChor (void)
+{
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+
+  if ( fTempDiff == TRUE ) {
+    DisposeVector( fSaveTempDiff );
+    DisposeMatrix( fSaveMoleFracDiff );
+  }
+
+  if (fSensAnal)
+    {
+      if (fSensObjAll)
+	{
+	  // sensitivity stuff
+	  for (int i = 0; i < fNSensObj; ++i)
+	    {
+	      delete fSensObj[i];
+	    }
+	  delete fSensObj;
+	}
+
+      if (fSensAnalSpec)
+	{
+	  // free array containing backup of reactions rate
+	  DisposeVector (fSaveAllRates);
+	}			
+    }			
+
+  Free1DIntArray (fISWork);
+  Free1DArray (fSWork);
+  Free1DIntArray (fIsen);
+  for (int i = 0; i < nOfSpeciesIn + fVariablesWithoutSpecies; ++i)
+    {
+      delete fVariableNames[i];
+    }
+  delete fVariableNames;
+
+  Free1DIntArray (fIWork);
+  Free1DArray (fRWork);
+
+  DisposeTensor (fIgnDelTimes);
+  DisposeTensor (fIgnDelTimesFirstStage);
+
+  Free1DIntArray (fInfo);
+
+  if (fAdditionalOutput)
+    {
+      DisposeMatrix (fReacRateSave);
+      DisposeMatrix (fDetProdRate);
+      DisposeMatrix (fEpsilonM1);
+      DisposeVector (fHeatRelease);
+      DisposeMatrix (fConsPro);
+
+      //PP
+      DisposeMatrix (fHeatRelSave);
+      //PP
+
+    }
+
+  	if ( fSoot ) {
+		DisposeMatrix( fSolSootMoments );
+	}
+	DisposeVector (fSolTemp);
+  DisposeMatrix (fSolMassFracs);
+  DisposeVector (fSolTime);
+
+  DisposeVector (fSolPrime);
+  DisposeVector (fSolution);
+}
+
+int T0DIsoChor::InitCVODE( void )
+{
+  int flag;  // for checking return values from cvode functions
+
+  /* set the solution vector and initialise from solution YInit
+     also assign pointer to first memory location in Y
+     NOTE: use compiler directive here later for parallel */
+	fCVY = N_VMake_Serial(fNOfEquations, fSolution->vec);
+
+	fCYdata = NV_DATA_S(fCVY);
+
+  /* create the memory object for CVODE:
+     The system is stiff due to chemistry, thus choose solver appropriately
+       CV_BDF:    linear multistep method (Backward Differentiation Formulas) 
+       CV_NEWTON: Newton iteration (modified newton iteration for banded) */
+	fMem = CVodeCreate(CV_BDF, CV_NEWTON);
+
+  /* allocate internal memory object:
+     initialise time:tInit
+     RHS function:   cvodeRHS
+     CV_SS:          scalar relative and absolute tolerances
+     reltol:         relative tolerance
+     abstol:         absolute tolerance */
+#ifdef SUNDIALS23
+	flag = CVodeMalloc(fMem, HomoResFuncCV, fTStart, fCVY, CV_SS, fRTol, &fATol);
+#else
+	flag = CVodeInit(fMem, HomoResFuncCV, fTStart, fCVY);
+	if (flag != CV_SUCCESS) {
+		fprintf(stderr, "#error: CVODEinit failed with code: %d\n", flag );
+		exit(2);
+	}
+      
+	flag = CVodeSStolerances(fMem, fRTol, fATol);
+#endif
+
+  if (flag != CV_SUCCESS)
+    {
+      if (flag == CV_MEM_NULL)
+        printf("CVODE ERROR: CVodeMalloc requires CVodeCreate");
+      printf("exiting: unable to allocate with CVodeMalloc\n");
+      exit(1);
+    }
+
+  // set pointer to parameters (structs) needed by the RHS function
+#ifdef SUNDIALS23
+  flag = CVodeSetFdata(fMem, this);
+#else
+  flag = CVodeSetUserData(fMem, this);
+#endif
+  
+  // defined dense matrix, set number of equations
+  flag = CVDense(fMem, fNOfEquations);
+  
+  // options
+  CVodeSetInitStep(fMem, 1.0e-9 );
+  CVodeSetMaxStep(fMem, MAXSTEP );
+  
+  return flag;
+}
+
+int T0DIsoChor::GetLenOfDetProdRate (char **names, int quant)
+{
+
+  int i, j, len = 0;
+  int *nUsedReacs = fSpecies->GetNOfUsedReactions ()->vec;
+  IntVectorPtr *usedReacs = fSpecies->GetUsedReactions ();
+  int *backReac = fReaction->GetBackwardReacs ()->vec;
+  int specNum;
+
+  for (i = 0; i < quant; ++i)
+    {
+      if ((specNum = fSpecies->FindSpecies (names[i])) >= 0)
+	{
+	  len += nUsedReacs[specNum];
+	  for (j = 0; j < nUsedReacs[specNum]; ++j)
+	    {
+	      if (backReac[usedReacs[specNum]->vec[j]] >= 0)
+		{
+		  --len;
+		}
+	    }
+	}
+    }
+
+  return len;
+
+}
+
+
+void T0DIsoChor::SetInitialConditions (Double * y, TInputDataPtr inp)
+{
+  int i;
+  Double mixMolarMass;
+  int nSpeciesInSystem = fSpecies->GetNSpeciesInSystem ();
+  SpeciesPtr species = inp->GetSpecies ();
+  BoundaryInputPtr initCond = inp->fInitialCond;
+  int inpTOffset = inp->fTemperatureOffset;
+  int *speciesIndex = NULL;
+  int specifiedSpecies = initCond->fSpecifiedSpeciesBCs;
+
+  y[fTemperature] = (initCond->fValue[inpTOffset] < 100.0)
+    ? 1000.0 / initCond->fValue[inpTOffset] : initCond->fValue[inpTOffset];
+  SetInitialPressure ();
+
+  if ( fKeepMassFracs == TRUE ) 
+    {
+      SetPhi (-1.0);
+    }
+
+  if (fKeepMassFracs != TRUE && GetPhi () > 0.0)
+    {
+      SetMassFracsOfPhi (this, GetPhi (), &y[fFirstSpecies], nSpeciesInSystem,
+			 fSpecies->GetMolarMass ()->vec,
+			 fSpecies->GetNames (), fEGR);
+    }
+  else
+    {
+      fKeepMassFracs = TRUE;
+      //  allocate memory for speciesIndex
+      speciesIndex = new int[initCond->fSpecifiedSpeciesBCs];
+      if (!speciesIndex)
+	FatalError ("memory allocation of TCountDiffFlamePhys failed");
+
+      //  set speciesIndex
+      for (i = 0; i < specifiedSpecies; ++i)
+	{
+	  if ((speciesIndex[i] = inp->FindSpecies (initCond->speciesName[i])) < 0)
+	    {
+	      fprintf (stderr, "###error: species %s not in mechanism\n",
+		       initCond->speciesName[i]);
+	      exit (2);
+	    }
+	}
+
+      // set value        
+      for (i = 0; i < specifiedSpecies; ++i)
+	{
+	  if (speciesIndex[i] >= nSpeciesInSystem)
+	    {
+	      cerr <<
+		"#warning: value initial condition for steady state species '"
+		<< fSpecies->GetNames ()[speciesIndex[i]] <<
+		"' specified, make no use of it" << NEWL;
+	    }
+	  else
+	    {
+	      y[speciesIndex[i] + fFirstSpecies] = initCond->fValueSpecies[i];
+	    }
+	}
+
+      if (initCond->fMixtureSpecification == kMolarFraction)
+	{
+	  // first compute molar mass of mixture
+	  for (i = 0, mixMolarMass = 0; i < nSpeciesInSystem; ++i)
+	    {
+	      mixMolarMass += species[i].molarMass * y[i + fFirstSpecies];
+	    }
+	  // compute massfractions
+	  for (i = 0; i < nSpeciesInSystem; ++i)
+	    {
+	      y[i + fFirstSpecies] *= species[i].molarMass / mixMolarMass;
+	    }
+	}
+      SetPhiOfMassFracs (this, GetPhiVector ()->vec, &y[fFirstSpecies],
+			 fSpecies->GetMolarMass ()->vec,
+			 fSpecies->GetNames ());
+      delete speciesIndex;
+    }
+
+  SetDensityPres (&y[fFirstSpecies], y[fTemperature]);
+
+  Double sum = 0.0;
+  for (i = 0; i < nSpeciesInSystem; ++i)
+    {
+      sum += y[i + fFirstSpecies];
+    }
+  if (fabs (sum - 1.0) > 1.0e-3)
+    {
+      cerr << "#warning: sum of Y_i for initial condition is " << sum << NEWL;
+    }
+  // set TotEnt
+  // calculate total enthalpy
+  fTotEnt = 0.0;
+  fSpecies->ComputeSpeciesProperties (y[fTemperature]);
+  for (i = 0; i < nSpeciesInSystem; ++i)
+    {
+      fTotEnt += y[i + fFirstSpecies] * fSpecies->GetEnthalpy ()->vec[i];
+    }
+}
+
+void T0DIsoChor::Solve (void)
+{
+  int i;
+  int &tigp = fIgnDelTimes->planes;
+  int &tigc = fIgnDelTimes->cols;
+  int &tigr = fIgnDelTimes->rows;
+  Double ***tig = fIgnDelTimes->tensor;
+  Double ***tig2 = fIgnDelTimesFirstStage->tensor;
+  int nOfSpecies = fSpecies->GetNOfSpecies ();
+  Double *temp = fSolTemp->vec;
+  Double *theTime = fSolTime->vec;
+  Flag leave;
+  Flag leaveTempCont;
+  Flag leavePhiCont;
+  Flag leavePressureCont;
+  Flag leaveSensAnal;
+  Flag ignited;
+  Double tIgnition;
+  int nothingHappens;
+  int isMechModified;
+
+  cerr << NEWL << "start computation" << NEWL << NEWL;
+
+  leavePressureCont = FALSE;
+  do
+    {
+      leavePhiCont = FALSE;
+      tigc = 0;
+      do
+	{
+	  leaveTempCont = FALSE;
+	  tigr = 0;
+	  do
+	    {
+	      leaveSensAnal = FALSE;
+	      isMechModified = 0;
+	      do
+		{
+		  fprintf (stderr, "\n\np = %g bar\tphi = %g\tT = %g K\n",
+			   fInitialPressure / 1.0e5, GetPhi (),
+			   fSolution->vec[fTemperature]);
+		  leave = FALSE;
+		  fError = FALSE;
+		  ignited = FALSE;
+		  fCHMax = 0.0;
+		  nothingHappens = 0;
+#ifdef CVODE
+		  CVodeSetStopTime(fMem, fTEnd);
+#else
+		  leave = FirstStep ();
+#endif
+
+
+		  if (!leave)
+		    {
+		      do
+			{
+			  leave = OneStep ();
+			  // check what happens and set nothingHappens
+			  if ((temp[fActLength - 1] - temp[fActLength - 2])
+			      / temp[fActLength - 1] < 1.0e-3
+			      && (temp[fActLength - 1] - temp[fActLength - 2])
+			      / (theTime[fActLength - 1] -
+				 theTime[fActLength - 2]) < 8229.0)
+			    {
+			      ++nothingHappens;
+			    }
+			  else
+			    {
+			      nothingHappens = 0;
+			    }
+
+			  // check if ignition occured and set tIgnition, ignited
+
+#ifdef IG_CRIT_CH
+
+				Double **massFracs = fSolMassFracs->mat;
+			  if (fCH >= 0)
+			    {
+			      if (!ignited
+				  && massFracs[fActLength - 1][fCH] < 0.001 * fCHMax
+				  && temp[fActLength-1] > temp[0] + 10.0
+				  && fCHMax > 1.0e-20)
+				{
+				  cerr << "**ignition occured at t = " <<
+				    theTime[fActLength - 1] * 1000 << " ms" << NEWL;
+				  tIgnition = fTime;
+				  ignited = TRUE;
+				}
+			      fCHMax = MAX (fCHMax, massFracs[fActLength - 1][fCH]);
+			    }
+			  else
+			    {
+
+#endif
+			      if (!ignited && (temp[fActLength - 1] > temp[0] + 500.0 ))
+				{
+				  cerr << "**ignition occured" << NEWL;
+				  tIgnition = fTime;
+				  ignited = TRUE;
+				}
+
+#ifdef IG_CRIT_CH
+			    }
+#endif
+			  // check if finished and set leave
+			  if ((fTime >= fTEnd) ||
+			     ignited && nothingHappens > 30000
+			      && fTime > 3 * tIgnition && !fImposeTEnd)
+			    {
+			      leave = TRUE;
+			    }
+
+			  // check length of solution vector and possibly reduce
+			  if (!leave && fActLength == fNOutput)
+			    {
+			      Reduce ();
+			    }
+
+			}
+		      while (!leave);
+		    }
+		  
+		  if ( fTime > theTime[fActLength-1] ) {
+		    SaveSolution( fActLength, fTime, fSolution->vec, TRUE );
+		  }
+
+		  Double tIgn = GetTIgnition ();
+		  if (tIgn < 0.0)
+		    {
+		      cerr << NEWL << "** no ignition occured" << NEWL;
+		    }
+		  else
+		    {
+		      if ( fTempDiff != TRUE ) {
+			cerr << NEWL << "** ignition delay time is " << tIgn * 1000.0 << " ms" << NEWL;
+		      }
+		    }
+		  cerr << "** final time is          " << theTime[fActLength - 1] * 1000.0 
+		       << TAB << "ms" << NEWL;
+					cerr << "** final temperature is   " << temp[fActLength-1]
+						<< TAB << "K" << NEWL;
+					if ( fSoot ) cerr << "** final M1 is   " << fSolSootMoments->mat[fActLength-1][1]
+						<< TAB << "kmole/m^3" << NEWL;
+
+// soot yield
+					Double	C2Conc, yield;
+					if ( fSoot ) {
+						int		fuel = fInputData->FindSpecies( "N-C7H16" );
+						if (fuel < 0) fprintf(stderr, "fuel not found\n");
+						C2Conc = 7.0/2.0 * fSolMassFracs->mat[0][fuel] 
+							* fProperties->GetDensity() / fSpecies->GetMolarMass()->vec[fuel];
+						yield = fSolSootMoments->mat[fActLength-1][1] / C2Conc * 100.0;
+						cerr << "** final soot yield is   " << yield
+							<< TAB << "%" << NEWL;
+					}
+// soot yield
+
+					cerr << "** Delta T is   " << temp[fActLength-1] - temp[0]
+		       << TAB << "K" << NEWL;
+		  cerr << "** " << *fNActualStep << " steps needed" << NEWL;
+
+		  if (isMechModified == 0) 
+		    WriteSolution ();
+
+					if ( fSoot ) {
+						tig[tigp][tigc][tigr] = yield/1000.0;
+					}
+					else {
+						tig[tigp][tigc][tigr] = GetTIgnition();
+						tig2[tigp][tigc][tigr] = GetTIgnitionFirstStage ();
+					}
+		  if ( fTempDiff == TRUE ) {
+		    SaveMoleFracDiff( tigr );
+		  }
+		  if (tig[tigp][tigc][tigr] < 0.0)
+		    {
+		      tig[tigp][tigc][tigr] = -1.0e9;
+		    }
+
+		  // check SensAnal
+		  if (fSensAnal)
+		    {
+		      		SaveSensCoeff ();
+		      		fprintf( stderr, "Writing Sensitivity coefficients\n");
+		      		WriteSensCoeffs ();
+		      
+		      // check if there are more species or reactions to be analysed
+		      if (IsLastFreqFac ())
+			{
+			  // if not, leave the solver
+			  leaveSensAnal = TRUE;
+			  WriteSortedSensCoeffs();
+			}
+
+		      else
+			{
+			  // if yes, re-init system to start the analysis of the next species/reaction
+			  ReInit (kSensAnal);
+			  isMechModified++;
+			}
+		    }
+		  else
+		    {
+		      leaveSensAnal = TRUE;
+		    }
+		  
+		} while (!leaveSensAnal);
+	      
+	      // check tempcont
+	      if (fContinType != kTemperature || !fContInc)
+		{
+		  leaveTempCont = TRUE;
+		}
+	      else if (!fInvInitialTemp
+		       && (temp[0] + fContInc) * fContInc > fContBound * fContInc)
+		{
+		  leaveTempCont = TRUE;
+		}
+	      else if (fInvInitialTemp
+		       && (1000.0 / (1000.0 / temp[0] + fContInc)) * fContInc < (fContBound + 1.0) * fContInc)
+		{
+		  leaveTempCont = TRUE;
+		}
+	      else
+		{
+		  ReInit (kTemp);
+		}
+	      WriteIgnDelTimes ();
+	      WriteIgnDelTimesFirstStage ();
+	      if ( fTempDiff == TRUE ) WriteMoleFracDiff();
+	    }
+	  while (!leaveTempCont);
+	  // check phicont
+	  if (IsLastPhi ())
+	    {
+	      leavePhiCont = TRUE;
+	    }
+	  else
+	    {
+	      ReInit (kPhi);
+	    }
+	}
+      while (!leavePhiCont);
+      // check pressurecont
+      if (IsLastPressure ())
+	{
+	  leavePressureCont = TRUE;
+	}
+      else
+	{
+	  ReInit (kPress);
+	}
+    }
+  while (!leavePressureCont);
+  
+  int	j, k;
+  fprintf( stderr, "\nT_0 [K]\tt_ig [ms]\n" );
+  for ( k = 0; k < tigp+1; ++k ) {
+    for ( j = 0; j < tigc+1; ++j ) {
+      for ( i = 0; i < tigr+1; ++i ) {
+	if ( fTempDiff == TRUE ) {
+	  fprintf( stderr, "%g\t%g\n"
+		   , ( fInvInitialTemp ) ? 1000.0 / ( 1000.0 / fInitialTemp + i * fContInc )
+		   : fInitialTemp + i * fContInc
+		   , tig[k][j][i] );
+	}
+	else {
+	  if ( tig[k][j][i] > 0.0 ) {
+	    fprintf( stderr, "%g\t%g\n"
+		     , ( fInvInitialTemp ) ? 1000.0 / ( 1000.0 / fInitialTemp + i * fContInc )
+		     : fInitialTemp + i * fContInc
+		     , tig[k][j][i] * 1000 );
+	  }
+	  else {
+	    fprintf( stderr, "%g\t%s\n"
+		     , ( fInvInitialTemp ) ? 1000.0 / ( 1000.0 / fInitialTemp + i * fContInc )
+		     : fInitialTemp + i * fContInc
+		     , "no ignition" );
+	  }
+	}
+      }
+    }
+  }
+}
+
+void T0DIsoChor::WriteMoleFracDiff( char *tail )
+{
+  int         i, k, ifiles, maxCols = 10000;
+  int 	      nOfSpecies = fSpecies->GetNOfSpecies();
+  int 	      nOfSpeciesIn = fSpecies->GetNSpeciesInSystem();
+  int         nFiles = nOfSpecies / maxCols + 1;
+  Double      *time = fSolTime->vec,T0;
+  Double      **XDiff = fSaveMoleFracDiff->mat;
+  Double      *TDiff = fSaveTempDiff->vec;
+  FILE 	      *fp;
+  int         nspecmin,nspecmax=0;
+  char        pref[12];
+
+  for (ifiles=0; ifiles < nFiles; ++ifiles) {
+    nspecmin = nspecmax;
+    nspecmax += maxCols;
+    nspecmax = minint(nspecmax,nOfSpecies);
+    sprintf( pref, "XDiff%d",ifiles+1 );
+    fp = GetOutputFile( pref, tail, TFlame::kData );
+    
+    fprintf( fp, "*\n%-12s\t%-12s", "T\\u0\\n [K]", "T [K]" );
+    for ( i = nspecmin; i < nspecmax; ++i ){
+      fprintf( fp, "\tY-%-10s", fSpecies->GetNames()[i] );
+    }
+    for ( k = 0; k < fSaveMoleFracDiff->phys_cols; ++k ){
+      T0 = ( fInvInitialTemp ) 
+	? 1000.0 / ( 1000.0 / fInitialTemp + k * fContInc ) 
+	: fInitialTemp + k * fContInc;
+      fprintf( fp, "\n%-12E\t%-12E", T0, TDiff[k] );
+      for ( i = nspecmin; i < nspecmax; ++i ){
+	fprintf( fp, "\t%-12E", XDiff[k][i] );
+      }
+    }
+    fprintf( fp, "\n" );
+    
+    
+    fclose( fp );
+  }
+}
+
+void T0DIsoChor::WriteIgnDelTimes (void)
+{
+  int i, j, k;
+  char *name = new char[64];
+  FILE *fp;
+  Double T0;
+  int tigp = fIgnDelTimes->phys_planes;
+  int tigc = fIgnDelTimes->phys_cols;
+  int tigr = fIgnDelTimes->phys_rows;
+  Double ***tig = fIgnDelTimes->tensor;
+  Double ***tig2 = fIgnDelTimesFirstStage->tensor;
+
+  sprintf (name, "%.8s_IgniDelTimes", fSpecies->GetNames ()[GetFuelIndex ()]);
+
+  fp = GetOutfile (name, TFlame::kData);
+  delete name;
+
+  fprintf (fp, "*\n%-12s\t%-17s", "T\\u0\\n [K]", "1000/T\\u0\\n [1/K]");
+  for (k = 0; k < tigp; ++k)
+    {
+      for (j = 0; j < tigc; ++j)
+	{
+	  fprintf (fp, "\tp = %.3g bar  phi = %.2g",
+		   fPressure->vec[k] / 1.0e5, GetPhiVector ()->vec[j]);
+	}
+    }
+
+  for ( i = 0; i < tigr; ++i ) {
+    T0 = ( fInvInitialTemp ) ? 1000.0 / ( 1000.0 / fInitialTemp + i * fContInc ) : fInitialTemp + i * fContInc;
+    fprintf( fp, "\n%g\t%g", T0, 1000.0 / T0 );
+    for ( k = 0; k < tigp; ++k ) 
+      {
+	for ( j = 0; j < tigc; ++j ) 
+	  {
+	    if ( tig[k][j][i] > 0.0 ) 
+	      {
+		if ( fTempDiff == TRUE ) 
+		  {
+		    fprintf( fp, "\t%g", tig[k][j][i] );
+		  }
+		else 
+		  {
+		    fprintf( fp, "\t%g", tig[k][j][i] * 1000 );
+		  }
+	      }
+	    else 
+	      {
+		fprintf( fp, "\t" );
+	      }
+	  }
+      }
+  }
+ 
+	fclose( fp );
+}
+
+void
+T0DIsoChor::WriteIgnDelTimesFirstStage (void)
+{
+  int i, j, k;
+  char *name = new char[64];
+  FILE *fp;
+  double T0;
+  int tigp = fIgnDelTimes->phys_planes;
+  int tigc = fIgnDelTimes->phys_cols;
+  int tigr = fIgnDelTimes->phys_rows;
+  double ***tig = fIgnDelTimesFirstStage->tensor;
+
+  sprintf (name, "%.8s_IgniDelTimesFS", fSpecies->GetNames ()[GetFuelIndex ()]);
+
+  fp = GetOutfile (name, TFlame::kData);
+  delete name;
+
+  fprintf (fp, "*\n%-12s\t%-17s", "T\\u0\\n [K]", "1000/T\\u0\\n [1/K]");
+  for (k = 0; k < tigp; ++k) {
+    for (j = 0; j < tigc; ++j) {
+      fprintf (fp, "\tp = %.3g bar  phi = %.2g",
+	       fPressure->vec[k] / 1.0e5, GetPhiVector ()->vec[j]);
+    }
+  }
+
+
+  for (i = 0; i < tigr; ++i) {
+    T0 = (fInvInitialTemp)
+      ? 1000.0 / (1000.0 / fInitialTemp + i * fContInc)
+      : fInitialTemp + i * fContInc;
+    fprintf (fp, "\n%g\t%g", T0, 1000.0 / T0);
+    for (k = 0; k < tigp; ++k) {
+      for (j = 0; j < tigc; ++j) {
+	if (tig[k][j][i] > 0.0) {
+	  if (fTempDiff == TRUE) {
+	    /*fprintf (fp, "\t%g", tig[k][j][i]);-20.13E*/
+	    fprintf (fp, "\t%20.13f", tig[k][j][i]);
+	  }
+	  else {
+	    /*fprintf (fp, "\t%g", tig[k][j][i] * 1000);*/
+	    fprintf (fp, "\t%20.13f", tig[k][j][i] * 1000);
+	  }
+	}
+	else {
+	  fprintf (fp, "\t");
+	}
+      }
+    }
+  }
+
+  fclose (fp);
+}
+
+void T0DIsoChor::ShowSolution( void )
+{
+	int		i, nOfSpecies = fSpecies->GetNOfSpecies();
+	char	**names = fSpecies->GetNames();
+
+	for ( i = 0; i < nOfSpecies; ++i ) {
+		fprintf( stderr, "%s\t%g\n", names[i], fSolMassFracs->mat[fActLength-1][i] );
+	}
+	fprintf( stderr, "%s\t%g\n", fVariableNames[fTemperature], fSolTemp->vec[fActLength-1] );
+	if ( fSoot ) {
+		for ( i = 0; i < fSoot->GetNSootMoments(); ++i ) {
+			fprintf( stderr, "%s\t%g\n", fVariableNames[fSootMoments+i]
+						, fSolSootMoments->mat[fActLength-1][i] );
+		}
+	}
+	fprintf( stderr, "\n" );
+}
+
+Flag T0DIsoChor::FirstStep( void )
+{
+  Flag leave = OneStep ();
+
+  fInfo[11 - 1] = 0;
+
+  return leave;
+}
+
+Flag T0DIsoChor::OneStep (void)
+{
+	int flag;
+	const int deltaProgress = 100;
+
+#ifdef CVODE
+	long int nst;         // current time step number
+	Double	dt;
+
+#ifdef SUNDIALS23
+    flag = CVode(fMem, fTEnd,fCVY, &fTime, CV_ONE_STEP_TSTOP);
+#else
+    flag = CVode(fMem, fTEnd,fCVY, &fTime, CV_ONE_STEP);
+#endif
+
+	SolutionFromCVode();
+
+    CVodeGetNumSteps(fMem, &nst);
+    fNActualStepCV = nst;
+    CVodeGetLastStep(fMem, &dt);
+    CVodeGetLastOrder(fMem, &fNActualOrdCV);
+	fMaxStepSize = (fMaxStepSize > dt) ? fMaxStepSize : dt;
+
+	if ( *fNActualStep % deltaProgress == 0 ) {
+		fprintf( stderr, "step = %d\tord = %d\tt = %g ms\tT = %g K\n", fNActualStepCV, *fNActualOrd, fTime*1000.0, fSolution->vec[fTemperature] );
+    }
+
+	if (flag < 0) {
+		cerr << "#error: cvode error no. " << flag << " occured" << NEWL;
+		fError = TRUE;
+		return TRUE;
+	} 
+	else {
+		SaveSolution (fActLength, fTime, fSolution->vec);
+
+		return FALSE;
+	}
+#else
+  DDASSL (HomoResFunc, &fNOfEquations, &fTime, fSolution->vec, fSolPrime->vec,
+	  &fTEnd, fInfo, &fRTol, &fATol, &fIdid, fRWork, &fLRW, fIWork, &fLIW,
+	  NULL, (int *) this, NULL);
+
+  fMaxStepSize = (fMaxStepSize > fRWork[7 - 1]) ? fMaxStepSize : fRWork[7 - 1];
+
+	if ( *fNActualStep % deltaProgress == 0 ) {
+		if ( fSoot ) {
+			Double	mixMolarMass;
+			fProperties->ComputeMixtureMolarMass( mixMolarMass, &fSolution->vec[fFirstSpecies], fSpecies->GetMolarMass()->vec, fSpecies->GetNSpeciesInSystem() );
+			fprintf( stderr, "step = %d\tord = %d\tt = %g ms\tT = %g K\tMo = %g\tM1 = %g kmole/m^3\n"
+				, *fNActualStep, *fNActualOrd, fTime*1000.0, fSolution->vec[fTemperature]
+				, fSolution->vec[fSootMoments] * fProperties->GetPressureRef() * mixMolarMass 
+									/ ( RGAS * fSolution->vec[fTemperature] )
+				, fSolution->vec[fSootMoments+1] * fProperties->GetPressureRef() * mixMolarMass 
+									/ ( RGAS * fSolution->vec[fTemperature] ));
+		} else {
+			fprintf( stderr, "step = %d\tord = %d\tt = %g ms\tT = %g K\n", *fNActualStep, *fNActualOrd, fTime*1000.0, fSolution->vec[fTemperature] );
+		}
+    }
+
+  if (fIdid < 1)
+    {
+      cerr << "#error: ddassl error no. " << fIdid << " occured" << NEWL;
+      fError = TRUE;
+      return TRUE;
+    }
+  else
+    {
+      SaveSolution (fActLength, fTime, fSolution->vec);
+
+      if (fEquidistant && (fIdid == 2 || fIdid == 3))
+	{
+	  fTout += fDeltaT;
+	}
+
+      return FALSE;
+    }
+#endif
+}
+
+void
+T0DIsoChor::InitDasslWorkSpace (void)
+{
+  Clear1DArray (fRWork, fLRW);
+
+  if (fInfo[8 - 1] == 1)
+    {
+      fRWork[3 - 1] = 1.0e-15;	// is recognized only, if info[8] = 1
+    }
+  if (fInfo[9 - 1] == 1)
+    {
+      fIWork[3 - 1] = fMaxOrd;	// is recognized only, if info[9] = 1
+    }
+  if (fInfo[7 - 1] == 1)
+    {
+      fRWork[2 - 1] = MAXSTEP;	// is recognized only, if info[7] = 1
+    }
+}
+
+void
+T0DIsoChor::ReInit (ReInitType what)
+{
+  fTime = fTStart;
+
+  Clear1DArray (fSolution->vec, fSolution->len);
+  Clear1DArray (fSolPrime->vec, fSolPrime->len);
+
+
+  //    RestoreSolution( 0, fTime, fSolution->vec );
+  SetInitialConditions (fSolution->vec, fInputData);
+
+  switch (what)
+    {
+    case kSensAnal:
+      NextRate ();
+      fSolution->vec[fTemperature] = fSolTemp->vec[0];
+      RestoreSolution (0, fTime, fSolution->vec);
+      break;
+
+    case kTemp:
+      fSolution->vec[fTemperature] = (fInvInitialTemp)
+	? 1000.0 / (1000.0 / fSolTemp->vec[0] + fContInc)
+	: fSolTemp->vec[0] + fContInc;
+      fIgnDelTimes->rows++;
+      fIgnDelTimesFirstStage->rows++;
+      break;
+
+    case kPhi:
+      NextPhi ();
+      SetMassFracsOfPhi (this, GetPhi (), &fSolution->vec[fFirstSpecies],
+			 fSpecies->GetNSpeciesInSystem (),
+			 fSpecies->GetMolarMass ()->vec,
+			 fSpecies->GetNames (), fEGR);
+      fIgnDelTimes->rows = 0;
+      fIgnDelTimesFirstStage->rows = 0;
+      fIgnDelTimes->cols++;
+      fIgnDelTimesFirstStage->rows++;
+      break;
+
+    case kPress:
+      NextPressure ();
+      SetInitialPressure ();
+      // init phi
+      InitPhi ();
+      if (GetPhi () > 0.0)
+	{
+	  SetMassFracsOfPhi (this, GetPhi (), &fSolution->vec[fFirstSpecies],
+			     fSpecies->GetNSpeciesInSystem (),
+			     fSpecies->GetMolarMass ()->vec,
+			     fSpecies->GetNames ());
+	}
+      fIgnDelTimes->rows = 0;
+      fIgnDelTimesFirstStage->rows = 0;
+      fIgnDelTimes->cols = 0;
+      fIgnDelTimesFirstStage->cols = 0;
+      fIgnDelTimes->planes++;
+      fIgnDelTimesFirstStage->planes++;
+      break;
+
+    default:
+      cerr << "#error in function T0DIsoChor::ReInit" << NEWL;
+      exit (2);
+    }
+
+  fActLength = 0;
+  fDeltaStepSave = 1;
+
+  SaveSolution (fActLength, fTime, fSolution->vec, TRUE);
+
+  SetDensityPres (fSolMassFracs->mat[0], fSolTemp->vec[0]);
+
+#ifdef CVODE
+	SolutionToCVode();
+#ifdef SUNDIALS23
+	CVodeReInit(fMem, HomoResFuncCV, fTStart, fCVY, CV_SS, fRTol, &fATol);
+#else
+	CVodeReInit(fMem, fTStart, fCVY);
+#endif
+#else
+	InitDasslWorkSpace ();
+	SetInfo ();
+#endif
+}
+
+void T0DIsoChor::SolutionToCVode( void )
+{
+	copy( fNOfEquations, fSolution->vec, 1, fCYdata, 1 );
+}
+
+void T0DIsoChor::SolutionFromCVode( void )
+{
+	copy( fNOfEquations, fCYdata, 1, fSolution->vec, 1 );
+}
+
+void T0DIsoChor::WriteSensCoeffs (void)
+{
+  FILE *fp;
+  char **label = fReaction->GetLabels ();
+  int  i, j;
+  char buffer [30];
+  char *reac;
+
+  if (fSensAnalSpec)
+    {
+
+      if (fSensMax)
+	{
+
+	  fp = GetOutputFile ("Max_Spec_SC", NULL, TFlame::kText);
+
+	  // write Spec_SC file (raw non sorted coefficients)
+	  fprintf (fp, "Species\tTig\tFinal_T\t");
+	  if (fNSensObj)
+	    {
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "Max_%s\t", fSensObj[i]);
+		}
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "LocOfMax_%s\t", fSensObj[i]);
+		}
+	    }
+	  fprintf (fp, "\n");
+	  
+	  // Non-sorted Sensitivity coefficients
+	  for (i = fFirstSensRate; i < fDistFreqFac + 1; ++i)
+	    {
+	
+	      // First column
+	      fprintf( fp, "%s\t", fSpecies->GetNames ()[i - fFirstSensRate]);	      
+	     
+	      // Rest
+	      for (j = 0; j < (2 + 2 * fNSensObj); j++)
+		{
+		  fprintf (fp, "%g\t", fSensCoeffs->mat[j][i - fFirstSensRate]);
+		}
+	      
+	      fprintf (fp, "\n");
+	    }
+
+	  fclose (fp);
+	}
+      
+
+      if (fSensFinal)
+	{
+
+      sprintf(buffer, "%4g", fTEnd*1000 );
+	  strcat(buffer,"_Final_Spec_SC");
+	  fp = GetOutputFile (buffer, NULL, TFlame::kText);
+
+	  // write Reac_SC file (raw non sorted coefficients)
+	  fprintf (fp, "Species\tTig\tFinal_T\t");
+	  if (fNSensObj)
+	    {
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "SensCoeff_%s\t", fSensObj[i]);
+		}
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "Y_%s\t", fSensObj[i]);
+		}
+	    }
+	  fprintf (fp, "\n");
+	  
+	  // Sensitivity coefficients
+	  for (i = fFirstSensRate; i < fDistFreqFac + 1; ++i)
+	    {
+
+	      // First column
+	      fprintf( fp, "%s\t", fSpecies->GetNames ()[i- fFirstSensRate] );	      
+	     
+	      // Rest
+	      for (j = 0; j < (2 + 2 * fNSensObj); j++)
+		{
+		  fprintf (fp, "%g\t", fSensCoeffs->mat[j][i - fFirstSensRate]);
+		}
+	      
+	      fprintf (fp, "\n");
+	    }
+	  fclose (fp);
+	}
+    }
+  else
+    {
+
+      if (fSensMax)
+	{
+
+	  fp = GetOutputFile ("Max_Reac_SC", NULL, TFlame::kText);
+
+	  // write Reac_SC file (raw non sorted coefficients)
+	  fprintf (fp, "Label\tTig\tFinal_T\t");
+
+	  if (fNSensObj)
+	    {
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "Max_%s\t", fSensObj[i]);
+		}
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "LocOfMax_%s\t", fSensObj[i]);
+		}
+	    }
+	  fprintf (fp, "\n");
+	  // Non-sorted Sensitivity coefficients
+	  for (i = fFirstSensRate; i < fDistFreqFac + 1; ++i)
+	    {
+
+	      // First column
+	      fprintf (fp, "%s\t", label[i]);
+
+	      // Rest
+	      for (j = 0; j < (2 + 2 * fNSensObj); j++)
+		{
+		  fprintf (fp, "%g\t", fSensCoeffs->mat[j][i - fFirstSensRate]);
+		}
+	      
+	      fprintf (fp, "\n");
+	    }
+
+	  fclose (fp);
+	}
+      
+
+      if (fSensFinal)
+	{
+
+	  gcvt(fTEnd*1000,4,buffer);
+	  strcat(buffer,"_Final_Reac_SC");
+	  fp = GetOutputFile (buffer, NULL, TFlame::kText);
+
+	  // write Reac_SC file (raw non sorted coefficients)
+	  fprintf (fp, "Label\tTig\tFinal_T\t");
+	  if (fNSensObj)
+	    {
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "SensCoeff_%s\t", fSensObj[i]);
+		}
+	      for (i = 0; i < fNSensObj; i++)
+		{
+		  fprintf (fp, "Conc_%s\t", fSensObj[i]);
+		}
+	    }
+	  fprintf (fp, "\n");
+	  
+	  // Sensitivity coefficients
+	  for (i = fFirstSensRate; i < fDistFreqFac + 1; ++i)
+	    {
+
+	      // First column
+	      fprintf (fp, "%s\t", label[i]);
+	     
+	      // Rest
+	      for (j = 0; j < (2 + 2 * fNSensObj); j++)
+		{
+		  fprintf (fp, "%g\t", fSensCoeffs->mat[j][i - fFirstSensRate]);
+		}
+	      
+	      fprintf (fp, "\n");
+	    }
+	  fclose (fp);
+	}
+    }
+}
+
+
+void T0DIsoChor::WriteSortedSensCoeffs (void)
+{
+
+  FILE *fpmaxsorted,*fplocsorted,*fpsorted;
+
+  int  nReactions = fReaction->GetNOfReactions ();
+  char **label = fReaction->GetLabels ();
+  char reac[128];
+
+  int nSpecies = fSpecies->GetNSpeciesInSystem ();
+  char **name = fSpecies->GetNames ();
+
+  int i, j, maxi, indexMax;
+  char buffer [30];
+
+  Double *sensCoeffs;
+
+  if (fSensAnalSpec)
+    {
+      indexMax = nSpecies-fFirstSensRate;
+
+      if (fSensMax)
+	{
+	  // write Spec_SC_sorted file (sorted coefficients for each SensObj)
+
+	  fpmaxsorted = GetOutputFile ("MaxSorted_Spec_SC", NULL, TFlame::kText);	  
+	  fplocsorted = GetOutputFile ("LocSorted_Spec_SC", NULL, TFlame::kText);
+
+	 	  
+	  // Ignition time
+	  fprintf (fpmaxsorted, "Tig:\n");
+	  sensCoeffs = fSensCoeffs->mat[0];
+
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fprintf (fpmaxsorted, "\t%12g\t%s\n",sensCoeffs[maxi-fFirstSensRate],name[maxi]);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpmaxsorted, "\n");
+
+	  // Final temperature
+	  fprintf (fpmaxsorted, "T:\n");
+	  sensCoeffs = fSensCoeffs->mat[1];
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fprintf (fpmaxsorted, "\t%12g\t%s\n",sensCoeffs[maxi-fFirstSensRate],name[maxi]);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpmaxsorted, "\n");
+
+
+	  // SensObjects - Maximum
+	  for (int j = 0; j < fNSensObj; j++)
+	    {
+	      
+	      fprintf (fpmaxsorted, "%s:\n",fSensObj[j]);
+	      sensCoeffs = fSensCoeffs->mat[2+j];
+
+	      for (int i=0;i<indexMax;++i)
+		{
+		  maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+		  
+		  if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		    fprintf (fpmaxsorted, "\t%12g\t%s\n",sensCoeffs[maxi-fFirstSensRate],name[maxi]);
+		  }
+		  sensCoeffs[maxi-fFirstSensRate] = 0.0;
+		}
+	      fprintf (fpmaxsorted, "\n");
+	    }
+
+
+	  // SensObjects - Location of Max
+	  for (int j = 0; j < fNSensObj; j++)
+	    {
+	      
+	      fprintf (fplocsorted, "%s:\n",fSensObj[j]);
+	      sensCoeffs = fSensCoeffs->mat[2+fNSensObj+j];
+
+	      for (int i=0;i<indexMax;++i)
+		{
+		  maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+		  
+		  if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		    fprintf (fplocsorted, "\t%12g\t%s\n",sensCoeffs[maxi-fFirstSensRate],name[maxi]);
+		  }
+		  sensCoeffs[maxi-fFirstSensRate] = 0.0;
+		}
+	      fprintf (fplocsorted, "\n");
+	    }
+	  
+	  fclose (fpmaxsorted);
+	  fclose (fplocsorted);
+	}
+      
+
+      if (fSensFinal)
+	{
+	  // write Spec_SC_sorted file (sorted coefficients for each SensObj)
+
+	  gcvt(fTEnd*1000,4,buffer);
+	  strcat(buffer,"_FinalSorted_Spec_SC");
+	  fpsorted = GetOutputFile (buffer, NULL, TFlame::kText);
+  
+	  // Ignition time
+	  fprintf (fpsorted, "Tig:\n");
+	  sensCoeffs = fSensCoeffs->mat[0];
+
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fprintf (fpsorted, "\t%12g\t%s\n",sensCoeffs[maxi-fFirstSensRate],name[maxi]);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpsorted, "\n");
+
+
+	  // Final temperature
+	  fprintf (fpsorted, "T:\n");
+	  sensCoeffs = fSensCoeffs->mat[1];
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fprintf (fpsorted, "\t%12g\t%s\n",sensCoeffs[maxi-fFirstSensRate],name[maxi]);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpsorted, "\n");
+
+
+	  // SensObjects - Final values
+	  for (int j = 0; j < fNSensObj; j++)
+	    {
+	      
+	      fprintf (fpsorted, "%s:\n",fSensObj[j]);
+	      sensCoeffs = fSensCoeffs->mat[2+j];
+
+	      for (int i=0;i<indexMax;++i)
+		{
+		  maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+		  
+		  if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		    fprintf (fpsorted, "\t%12g\t%s\n",sensCoeffs[maxi-fFirstSensRate],name[maxi]);
+		  }
+		  sensCoeffs[maxi-fFirstSensRate] = 0.0;
+		}
+	      fprintf (fpsorted, "\n");
+	    }
+
+	  fclose (fpsorted);
+	}
+    }
+  else
+    {
+      
+      indexMax = nReactions-fFirstSensRate;
+
+      if (fSensMax)
+	{
+	  // write Reac_SC_sorted file (sorted coefficients for each SensObj)
+
+	  fpmaxsorted = GetOutputFile ("MaxSorted_Reac_SC", NULL, TFlame::kText);
+	  fplocsorted = GetOutputFile ("LocSorted_Reac_SC", NULL, TFlame::kText);
+
+	 	  
+	  // Ignition time
+	  fprintf (fpmaxsorted, "Tig:\n");
+	  sensCoeffs = fSensCoeffs->mat[0];
+
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fReaction->PrintReactionEquation (maxi,fSpecies,reac);
+		fprintf (fpmaxsorted, "\t%12g\t%s:\t%s\n",sensCoeffs[maxi-fFirstSensRate],label[maxi],reac);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpmaxsorted, "\n");
+
+	  // Final temperature
+	  fprintf (fpmaxsorted, "T:\n");
+	  sensCoeffs = fSensCoeffs->mat[1];
+
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fReaction->PrintReactionEquation (maxi,fSpecies,reac);
+		fprintf (fpmaxsorted, "\t%12g\t%s:\t%s\n",sensCoeffs[maxi-fFirstSensRate], label[maxi],reac);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpmaxsorted, "\n");
+
+
+	  // SensObjects - Maximum
+	  for (int j = 0; j < fNSensObj; j++)
+	    {
+	      
+	      fprintf (fpmaxsorted, "%s:\n",fSensObj[j]);
+	      sensCoeffs = fSensCoeffs->mat[2+j];
+
+	      for (int i=0;i<indexMax;++i)
+		{
+		  maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+		  
+		  if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		    fReaction->PrintReactionEquation (maxi,fSpecies,reac);
+		    fprintf (fpmaxsorted, "\t%12g\t%s:\t%s\n",sensCoeffs[maxi-fFirstSensRate], label[maxi],reac);
+		  }
+		  sensCoeffs[maxi-fFirstSensRate] = 0.0;
+		}
+	      fprintf (fpmaxsorted, "\n");
+	    }
+
+
+	  // SensObjects - Location of Max
+	  for (int j = 0; j < fNSensObj; j++)
+	    {
+	      
+	      fprintf (fplocsorted, "%s:\n",fSensObj[j]);
+	      sensCoeffs = fSensCoeffs->mat[2+fNSensObj+j];
+
+	      for (int i=0;i<indexMax;++i)
+		{
+		  maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+		  
+		  if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		    fReaction->PrintReactionEquation (maxi,fSpecies,reac);
+		    fprintf (fplocsorted, "\t%12g\t%s:\t%s\n", sensCoeffs[maxi-fFirstSensRate],label[maxi],reac);
+		  }
+		  sensCoeffs[maxi-fFirstSensRate] = 0.0;
+		}
+	      fprintf (fplocsorted, "\n");
+	    }
+	  
+	  fclose (fpmaxsorted);
+	  fclose (fplocsorted);
+	}
+      
+
+      if (fSensFinal)
+	{
+
+	  // write Reac_SC_sorted file (sorted coefficients for each SensObj)
+
+	  gcvt(fTEnd*1000,4,buffer);
+	  strcat(buffer,"_FinalSorted_Reac_SC");
+	  fpsorted = GetOutputFile (buffer, NULL, TFlame::kText);
+
+	  // Ignition time
+	  fprintf (fpsorted, "Tig:\n");
+	  sensCoeffs = fSensCoeffs->mat[0];
+
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fReaction->PrintReactionEquation (maxi,fSpecies,reac);
+		fprintf (fpsorted, "\t%12g\t%s:\t%s\n",sensCoeffs[maxi-fFirstSensRate],label[maxi],reac);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpsorted, "\n");
+	  
+	  // Final temperature
+	  fprintf (fpsorted, "T:\n");
+	  sensCoeffs = fSensCoeffs->mat[1];
+	  for (int i=0;i<indexMax;++i)
+	    {
+	      maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+
+	      if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		fReaction->PrintReactionEquation (maxi,fSpecies,reac);
+		fprintf (fpsorted, "\t%12g\t%s:\t%s\n",sensCoeffs[maxi-fFirstSensRate], label[maxi],reac);
+	      }
+	      sensCoeffs[maxi-fFirstSensRate] = 0.0;
+	    }
+	  fprintf (fpsorted, "\n");
+
+
+	  // SensObjects - Final values
+	  for (int j = 0; j < fNSensObj; j++)
+	    {
+	      
+	      fprintf (fpsorted, "%s:\n",fSensObj[j]);
+	      sensCoeffs = fSensCoeffs->mat[2+j];
+
+	      for (int i=0;i<indexMax;++i)
+		{
+		  maxi = LocationOfAbsMax(indexMax,sensCoeffs) + fFirstSensRate;
+		  
+		  if ( sensCoeffs[maxi-fFirstSensRate] != 0.0 ) {
+		    fReaction->PrintReactionEquation (maxi,fSpecies,reac);
+		    fprintf (fpsorted, "\t%12g\t%s:\t%s\n",sensCoeffs[maxi-fFirstSensRate], label[maxi],reac);
+		  }
+		  sensCoeffs[maxi-fFirstSensRate] = 0.0;
+		}
+	      fprintf (fpsorted, "\n");
+	    }
+
+	  fclose (fpsorted);
+	}
+    }
+}
+
+void T0DIsoChor::SaveSensCoeff (void)
+{
+
+  // Compute Sensitivity coefficients
+  if (fDistFreqFac >= 0)
+    {
+
+      Double *a = fReaction->GetA ()->vec;
+      Double tigNow = GetTIgnition ();
+      Double Tf = fSolTemp->vec[fActLength - 1];
+      Double **Y = fSolMassFracs->mat;
+      int specNum;
+      Double maxi;
+      Double loc;
+      Double value;
+
+      if ( fSensAnalReac && fabs(a[fDistFreqFac] - fSavedFreqFac) <= 1.0e-20){
+	fprintf(stderr,"Choose a Sensitivity Analysis Factor different from 1\n");
+	exit(2);
+      }
+
+      // Effect on Ignition Delay Time
+      if (fSensAnalSpec)
+	{
+
+	  if (tigNow < 0.0 && fDataRef->vec[0] >= 0.0)
+	    {
+	      fSensCoeffs->mat[0][fDistFreqFac - fFirstSensRate] = -1.0;
+	    }
+	  else
+	    {
+	      fSensCoeffs->mat[0][fDistFreqFac - fFirstSensRate] =
+		((tigNow - fDataRef->vec[0]) / fDataRef->vec[0]);
+	    }
+	  fprintf (stderr,
+		   "**Species %s has a sensitivity coeff of %g on Tig\n",
+		   fSpecies->GetNames ()[fDistFreqFac],
+		   fSensCoeffs->mat[0][fDistFreqFac - fFirstSensRate]);
+
+	}
+      else
+	{
+	  if (tigNow < 0.0 && fDataRef->vec[0] >= 0.0)
+	    {
+	      fSensCoeffs->mat[0][fDistFreqFac - fFirstSensRate] = -1.0;
+	    }
+	  else
+	    {
+	      fSensCoeffs->mat[0][fDistFreqFac - fFirstSensRate] =
+		( fSavedFreqFac / fDataRef->vec[0] * (tigNow - fDataRef->vec[0]) /
+		      (a[fDistFreqFac] - fSavedFreqFac) );
+	    }
+	  fprintf (stderr,
+		   "**Reaction %s has a sensitivity coeff of %g on Tig with factor %f\n",
+		   fReaction->GetLabels ()[fDistFreqFac],
+		   fSensCoeffs->mat[0][fDistFreqFac - fFirstSensRate],
+		   fSensAnalFac);
+	}
+
+
+      // Effect on Temperature
+      if (fSensAnalSpec)
+	{
+
+	  fSensCoeffs->mat[1][fDistFreqFac - fFirstSensRate] =
+	    ((Tf - fDataRef->vec[1]) / fDataRef->vec[1]);
+	  fprintf (stderr,
+		   "**Species %s has a sensitivity coeff of %g on Tfinal\n",
+		   fSpecies->GetNames ()[fDistFreqFac],
+		   fSensCoeffs->mat[1][fDistFreqFac - fFirstSensRate]); 
+	}
+      else
+	{
+
+	  fSensCoeffs->mat[1][fDistFreqFac - fFirstSensRate] =
+	    (fSavedFreqFac / fDataRef->vec[1] * (Tf - fDataRef->vec[1]) /
+		  (a[fDistFreqFac] - fSavedFreqFac) );
+	  fprintf (stderr,
+		   "**Reaction %s has a sensitivity coeff of %g on Tfinal with factor %f\n",
+		   fReaction->GetLabels ()[fDistFreqFac],
+		   fSensCoeffs->mat[1][fDistFreqFac - fFirstSensRate],
+		   fSensAnalFac);
+	}
+
+
+      // Additional coefficients  
+      if (fNSensObj)
+	{
+
+	  if (fSensAnalSpec)
+	    {
+
+	      // Sensitivity analysis on maximum values
+	      if (fSensMax && !fSensFinal){
+
+
+		for (int i = 0; i < fNSensObj; i++)
+		  {
+		    if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+		      {
+			
+			// If species removed = SensObj, set coefficients to -1
+			if (specNum == fDistFreqFac){
+
+			  fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate] = 0;
+			  fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] = 0;
+			
+			}else{
+			  
+			  // Effect on Max Y of SensObj species
+			  // if max is first point, set deviation to 0
+			  
+			  if (LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ()) == 0){
+			    fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate] = 0;
+			    
+			  }else{
+			    maxi = Y[LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ())][specNum];
+			    fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate] =
+			      (  ( maxi - fDataRef->vec[2 + i]) / fDataRef->vec[2 + i] );
+			  }
+			  
+			  fprintf (stderr,
+				   "**Species %s has a sensitivity coeff of %g on Max value of %s\n",
+				   fSpecies->GetNames ()[fDistFreqFac],
+				   fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate],
+				   fSensObj[i]);
+			  
+			  
+			  // Effect on location of maximum
+			  Double *time = fSolTime->vec;
+			  loc = time[LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ())];
+			  
+			  if (LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ()) == 0){
+			    fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] = 0;
+			    
+			  }else{
+			    fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] =
+			      ( loc - fDataRef->vec[2 + 2*fNSensObj + i] ) /  fDataRef->vec[2 + 2*fNSensObj + i];
+			  }
+			  
+			  fprintf (stderr,
+				   "**Species %s has a sensitivity coeff of %g on location of max of %s\n",
+				   fSpecies->GetNames ()[fDistFreqFac],
+				   fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate],
+				   fSensObj[i]);
+			}
+		      }
+
+		  }
+
+	      // Sensitivity analysis on final values	
+	      }else if (!fSensMax && fSensFinal){
+		
+		for (int i = 0; i < fNSensObj; i++)
+		  {
+		    if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+		      {
+			
+			// If species removed = SensObj, set coefficients to -1
+			if (specNum == fDistFreqFac){
+
+			  fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate] = 0;
+			  fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] = 0;
+			
+			}else{
+
+			  // Effect on Final value of Y of SensObj species
+			  
+			  value = Y[fActLength - 1][specNum];
+			  fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate]  =
+			    (  ( value - fDataRef->vec[2 + fNSensObj + i] ) / fDataRef->vec[2 + fNSensObj + i] );
+			  fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] = value;
+			  
+			  fprintf (stderr,
+				   "**Species %s has a sensitivity coeff of %g on Final value of %s\n",
+				   fSpecies->GetNames ()[fDistFreqFac],fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate],
+				   fSensObj[i]);
+			}
+		      }
+		  }
+		
+	      }else{
+		printf("Choose sensitivity on maximal or final concentration\n");
+		exit( 2 );
+	      } 
+	    }
+	  else
+	    {
+
+	      // Sensitivity analysis on maximum values
+	      if (fSensMax && !fSensFinal){
+		
+		
+		for (int i = 0; i < fNSensObj; i++)
+		  {
+		    if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+		      {
+			
+			// Effect on Max Y of SensObj species
+			// if max is first point, set deviation to 0
+			
+			if (LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ()) == 0){
+			  fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate] = 0;
+			  
+			}else{
+			  maxi = Y[LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ())][specNum];
+			  fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate] = 
+			    (  (fSavedFreqFac / fDataRef->vec[2 + i]) *	
+			       ( maxi - fDataRef->vec[2 + i] ) / (a[fDistFreqFac] - fSavedFreqFac) );
+			}
+			
+			
+			fprintf (stderr,
+				 "**Reaction %s has a sensitivity coeff of %g on Max value of %s with factor %f\n",
+				 fReaction->GetLabels ()[fDistFreqFac],
+				 fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate],
+				 fSensObj[i], fSensAnalFac);
+			
+			
+			
+			// Effect on location of maximum
+			Double *time = fSolTime->vec;
+			loc = time[LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ())];
+
+			if (LocationOfMax(fActLength - 1, &Y[0][specNum],fSpecies->GetNOfSpecies ()) == 0){
+			  fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] = 0;
+
+			}else{
+			  fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] =
+			    (  ( fSavedFreqFac / fDataRef->vec[2 + 2*fNSensObj + i] ) *
+			       ( loc - fDataRef->vec[2 + 2*fNSensObj + i] ) / (a[fDistFreqFac] - fSavedFreqFac) );
+			}
+			
+			fprintf (stderr,
+				 "**Reaction %s has a sensitivity coeff of %g on location of max of %s with factor %f\n",
+				 fReaction->GetLabels ()[fDistFreqFac],
+				 fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate],
+				 fSensObj[i], fSensAnalFac);
+			
+		      }
+		  }
+		
+	      // Sensitivity analysis on final values	
+	      }else if (!fSensMax && fSensFinal){
+		
+		
+		for (int i = 0; i < fNSensObj; i++)
+		  {
+		    if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+		      {
+			
+			// Effect on Final value Y of SensObj species
+			value = Y[fActLength - 1][specNum];
+			fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate] =
+			  (  ( fSavedFreqFac / fDataRef->vec[2 + fNSensObj + i] ) *
+			     ( value - fDataRef->vec[2 + fNSensObj + i]) / (a[fDistFreqFac] - fSavedFreqFac) );
+			
+			fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate] = value;
+			
+			fprintf (stderr,
+				 "**Reaction %s has a sensitivity coeff of %g on Final value of %s with factor %f (Y = %g)\n",
+				 fReaction->GetLabels ()[fDistFreqFac],
+				 fSensCoeffs->mat[2 + i][fDistFreqFac - fFirstSensRate],
+				 fSensObj[i], fSensAnalFac, fSensCoeffs->mat[2 + fNSensObj + i][fDistFreqFac - fFirstSensRate]);
+		      }
+		  }
+
+	      }else{
+		printf("Choose sensitivity on maximal or final mass fraction\n");
+		exit( 2 );
+	      } 
+	    }
+	}
+    }
+}
+
+void
+T0DIsoChor::NextRate (void)
+{
+  Double *a = fReaction->GetA ()->vec;
+
+  if (fDistFreqFac >= 0)
+    {				// Not the first time NextRate is called
+
+      if (fSensAnalSpec)
+	{			// sensitivity analysis on species
+
+	  // Increment counter
+	  ++fDistFreqFac;
+
+	  // Find reactions containing analysed species and set their a to 0
+	  // Set other a to their original value
+
+	  Flag foundit;
+	  Double *aSave = fSaveAllRates->vec;
+	  int *specNumber;
+
+	  for (int i = 0; i < fReaction->GetNOfReactions (); ++i)
+	    {
+
+	      foundit = FALSE;
+	      specNumber = fReaction->GetSpeciesNumber ()[i]->vec;
+
+	      for (int j = 0; j < fReaction->GetNOfSpeciesPerReaction (i);
+		   ++j)
+		{
+		  if (specNumber[j] == fDistFreqFac)
+		    {
+		      foundit = TRUE;
+		    }
+		}
+
+	      if (foundit)
+		{
+		  a[i] = 0.0;
+		}
+	      else
+		{
+		  a[i] = aSave[i];
+		}
+	    }
+	}		
+
+
+      else if (fSensAnalReac)
+	{			
+
+	  // Restore original a for the reaction just analysed
+	  a[fDistFreqFac] = fSavedFreqFac;
+
+	  // Increment counter
+	  ++fDistFreqFac;
+
+	  // Save a for the next reaction to be analysed
+	  fSavedFreqFac = a[fDistFreqFac];
+
+	  // Set modified value for a
+	  a[fDistFreqFac] *= fSensAnalFac;
+
+	}	    
+
+    }
+
+  else
+    { // fSavedFreqFac = -1 : first sensitivity analysis 
+
+      // Save reference data from original computation
+      Double **Y = fSolMassFracs->mat;
+      Double *time = fSolTime->vec;
+      int specNum;
+
+      fDataRef->vec[0] = GetTIgnition ();
+      fDataRef->vec[1] = fSolTemp->vec[fActLength - 1];
+
+      if (fNSensObj)
+	{
+
+	  for (int i = 0; i < fNSensObj; i++)
+	    {
+	      if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+		{
+
+		  fDataRef->vec[2 + i] = Y[LocationOfMax(fActLength, &Y[0][specNum],fSpecies->GetNOfSpecies ())][specNum];
+		  fDataRef->vec[2 + fNSensObj + i] = Y[fActLength - 1][specNum];
+		  fDataRef->vec[2 + 2*fNSensObj + i] = time[LocationOfMax(fActLength, &Y[0][specNum],fSpecies->GetNOfSpecies ())];
+
+		}
+	      else
+		{
+		  printf ("######## Problem NextRate first iteration \n");
+		  exit (2);
+		}
+	    }
+	}
+
+      // Increment counter
+      if (fFirstSensRate > 0)
+	{
+	  fDistFreqFac = fFirstSensRate;
+	}
+      else
+	{
+	  ++fDistFreqFac;
+	}
+
+      if (fSensAnalSpec)
+	{			
+
+	  // Find reactions containing analysed species and set their a to 0
+
+	  Flag foundit;
+	  int *specNumber;
+
+	  for (int i = 0; i < fReaction->GetNOfReactions (); ++i)
+	    {
+
+	      foundit = FALSE;
+	      specNumber = fReaction->GetSpeciesNumber ()[i]->vec;
+
+	      for (int j = 0; j < fReaction->GetNOfSpeciesPerReaction (i);
+		   ++j)
+		{
+
+		  if (specNumber[j] == fDistFreqFac)
+		    {
+		      foundit = TRUE;
+		    }
+
+		}
+
+	      if (foundit)
+		{
+		  a[i] = 0.0;
+		}
+	    }
+
+	}		
+
+      else if (fSensAnalReac)
+	{			
+
+	  // Save a for the next reaction to be analysed
+	  fSavedFreqFac = a[fDistFreqFac];
+
+	  // Set modified value for a
+	  a[fDistFreqFac] *= fSensAnalFac;
+
+	}		
+
+    }
+}
+
+Flag T0DIsoChor::IsLastFreqFac (void)
+{
+
+	if (fSensAnalSpec) {
+		if (fDistFreqFac == (fSpecies->GetNSpeciesInSystem () - 1)) {
+			Double *a = fReaction->GetA ()->vec;
+			Double *aSave = fSaveAllRates->vec;
+	  for (int i = 0; i < fReaction->GetNOfReactions (); ++i)
+	    {
+	      a[i] = aSave[i];
+	    }
+	  fDistFreqFac = -1;
+	  return TRUE;
+
+	}
+      else
+	{
+	  return FALSE;
+	}
+    }
+
+  else if (fSensAnalReac)
+    {
+
+      if (fDistFreqFac == (fReaction->GetNOfReactions () - 1))
+	{
+	  fReaction->GetA ()->vec[fDistFreqFac] = fSavedFreqFac;
+	  fDistFreqFac = -1;
+	  return TRUE;
+
+	}
+      else
+	{
+	  return FALSE;
+	}
+    }
+
+    fprintf(stderr, "###error: function IsLastFreqFac should not be called\n" );
+    return FALSE;
+
+}
+
+void T0DIsoChor::SetDensityPres (Double * Y, Double temp)
+{
+  Double mixMolarMass = 0.0;
+  Double *molarMass = fSpecies->GetMolarMass ()->vec;
+  int nSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  Double & rho = fProperties->GetDensityRef ();
+  Double & pressure = fProperties->GetPressureRef ();
+
+  fProperties->ComputeMixtureMolarMass (mixMolarMass, Y, molarMass,
+					nSpeciesIn);
+
+  rho = fInitialPressure * mixMolarMass / (RGAS * temp);
+  pressure = fInitialPressure;
+}
+
+void T0DIsoChor::SaveMoleFracDiff( int jTemp )
+{
+	int		i;
+	Double	mixWFinal = 0.0;
+	Double	mixWStart = 0.0;
+	Double	**massFracs = fSolMassFracs->mat;
+	Double	*temp = fSolTemp->vec;
+	Double	**saveMoleFracDiff = fSaveMoleFracDiff->mat;
+	Double	*saveTDiff = fSaveTempDiff->vec;
+	Double	*time = fSolTime->vec;
+	Double	*molarMass = fSpecies->GetMolarMass()->vec;
+	int		nSpeciesIn = fSpecies->GetNSpeciesInSystem();
+	int		nSpecies = fSpecies->GetNOfSpecies();
+
+	if ( fError ) {
+	  return;
+	}
+	
+	fProperties->ComputeMixtureMolarMass( mixWStart, massFracs[0], molarMass, nSpeciesIn );
+	fProperties->ComputeMixtureMolarMass( mixWFinal, massFracs[fActLength-1], molarMass, nSpeciesIn );
+
+	if ( fTempDiff == TRUE ) {
+		saveTDiff[jTemp] = temp[fActLength-1] - temp[0];
+		for ( i = 0; i < nSpecies; ++i ) {
+			saveMoleFracDiff[jTemp][i] = ( massFracs[fActLength-1][i] * mixWFinal /*- massFracs[0][i] * mixWStart*/ ) / molarMass[i];
+		}
+	}
+}
+
+Double T0DIsoChor::GetTIgnition (void)
+{
+  int i;
+  Double *temp = fSolTemp->vec;
+  Double *time = fSolTime->vec;
+  
+  if (fError)
+    {
+      return -1.0;
+    }
+  
+  if ( fTempDiff == TRUE ) {
+    return temp[fActLength-1] - temp[0];
+  }
+#ifdef IGNDELFUEL
+  const Double bound = 1.0e-8;
+  Double **Y = fSolMassFracs->mat;
+	for ( i = 1; i < fActLength-1; ++i ) {
+		if ( Y[i][GetFuelIndex()] <= 0.1 * Y[0][GetFuelIndex()] ) {
+			return time[i-1] + (time[i]-time[i-1]) / (Y[i][GetFuelIndex()]-Y[i-1][GetFuelIndex()])
+			  * (0.1 * Y[0][GetFuelIndex()]-Y[i-1][GetFuelIndex()]);
+	}
+    }
+  return -1.0;
+#elif defined IGNDELTEMPBOUND
+    Double  tempEqui = 0.99*temp[fActLength-1];
+		for ( i = 1; i < fActLength; ++i ) {
+			if ( temp[i] > tempEqui ) {
+				return ( time[i-1] + ( time[i] - time[i-1] ) / ( temp[i] - temp[i-1] )
+										* ( tempEqui - temp[i-1] ) );
+		}
+    }
+  return -1.0;
+#else
+  int indIgnition = 0;
+  Double maxDeriv;
+  Double deriv;
+  Double dTimem, dTime;
+  
+  dTime = time[2] - time[1];
+  maxDeriv = FirstDeriv (temp[0], temp[1], temp[2], time[1] - time[0], dTime);
+  for (i = 1; i < fActLength - 1; ++i)
+    {
+      dTimem = dTime;
+      dTime = time[i + 1] - time[i];
+      deriv = FirstDeriv (temp[i - 1], temp[i], temp[i + 1], dTimem, dTime);
+      if ( (temp[i] - temp[0]) > 0.7 * (temp[fActLength-1]-temp[0]) && deriv > maxDeriv ) {
+	{
+	  indIgnition = i;
+	  maxDeriv = deriv;
+	}
+      }
+    }
+  if (temp[fActLength - 1] > 1.1 * temp[0])
+    {
+      return time[indIgnition];
+    }
+  else
+    {
+      return -1.0;
+    }
+  
+#endif
+}
+
+double
+T0DIsoChor::GetTIgnitionFirstStage (void)
+{
+  int i;
+  Double *temp = fSolTemp->vec;
+  Double *time = fSolTime->vec;
+
+  int indIgnition = 0;
+  double maxDeriv;
+  double deriv;
+  double dTimem, dTime;
+
+  dTime = time[2] - time[1];
+  maxDeriv = FirstDeriv (temp[0], temp[1], temp[2], time[1] - time[0], dTime);
+  for (i = 1; i < fActLength - 1; ++i) {
+    dTimem = dTime;
+    dTime = time[i + 1] - time[i];
+    deriv = FirstDeriv (temp[i - 1], temp[i], temp[i + 1], dTimem, dTime);
+    if (deriv > maxDeriv) {
+      indIgnition = i;
+      maxDeriv = deriv;
+    }
+  }
+  
+  return time[indIgnition];
+}
+
+void T0DIsoChor::SaveSolution (int count, Double time, Double * y, Flag doIt)
+{
+
+  char tail[64];
+
+  if ((*fNActualStep % fDeltaStepSave == 0) || doIt)
+    {
+      int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+      Double **Y = fSolMassFracs->mat;
+		int		nSootMoments;
+		Double	**mom;
+
+		if ( fSoot ) {
+			nSootMoments = fSoot->GetNSootMoments();
+			mom = fSolSootMoments->mat;
+		}
+
+      fSolTime->vec[count] = time;
+
+		for (int i = 0; i < nOfSpeciesIn; ++i) {
+			Y[count][i] = y[fFirstSpecies + i];
+		}
+
+      fSolTemp->vec[count] = y[fTemperature];
+
+		if ( fSoot ) {
+			Double	mixMolarMass;
+			fProperties->ComputeMixtureMolarMass( mixMolarMass, Y[count], fSpecies->GetMolarMass()->vec, nOfSpeciesIn );
+			for ( int i = 0; i < nSootMoments; ++i ) {
+				mom[count][i] = y[fSootMoments+i] * fProperties->GetPressureRef() * mixMolarMass 
+									/ ( RGAS * y[fTemperature] );
+			}
+		}
+
+      if (fAdditionalOutput)
+	{
+	  SaveAdditional (count);
+	}
+
+      ++fActLength;
+    }
+}
+
+void T0DIsoChor::SaveAdditional (int count)
+{
+  int i;
+  int specNum;
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  int nOfReactions = fReaction->GetNOfReactions ();
+  Double *conspro = fConsPro->mat[count];
+  Double *epsM1 = fEpsilonM1->mat[count];
+  Double *reacRateSave = fReacRateSave->mat[count];
+  Double *reactionRate = fReaction->GetReactionRate ()->vec;
+  Double *detProdRate = fDetProdRate->mat[count];
+  Double *source = New1DArray (nOfSpeciesIn);
+  Double *sink = New1DArray (nOfSpeciesIn);
+
+  //PP
+  Double *heatRelSave = fHeatRelSave->mat[count];
+  //PP  
+
+ 
+  // Update thermo properties using new solution
+  Double *nY = fSolMassFracs->mat[count];
+  Double temp = fSolTemp->vec[count];
+  UpdateThermoProps (nY, temp, fProperties->GetPressureRef(),
+		     fProperties->GetDensityRef(),kPressFromDens, NULL);
+
+  fSpecies->CompProdCons (source, sink, reactionRate);
+  
+  for (i = 0; i < nOfSpeciesIn; ++i)
+    {
+      epsM1[i] = (source[i] != 0.0) ? -sink[i] / source[i] - 1.0 : 1.0e-30;
+      conspro[3 * i] = source[i];
+      conspro[3 * i + 1] = sink[i];
+      conspro[3 * i + 2] = source[i] + sink[i];
+    }
+
+  for (i = 0; i < fNSensObj; ++i)
+    {
+      if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+	{
+	  detProdRate +=
+	    fSpecies->CompDetailedProdRate (specNum, detProdRate,
+					    fReaction->GetReactionRate ()->
+					    vec, fReaction);
+	}
+    }
+
+  for (i = 0; i < nOfReactions; ++i)
+    {
+      reacRateSave[i] = fReaction->GetReactionRate ()->vec[i];
+      //printf("i = %d\n reacrateVRAI = %g\n\n",i,reacRateSave[i]);
+    }
+
+  fSpecies->CompHeatRelease (&fHeatRelease->vec[count],
+			     fSpecies->GetProductionRate ()->vec,
+			     fSpecies->GetEnthalpy ()->vec);
+
+  //PP detailed Heat release computation used for Reduction purposes
+  for (i = 0; i < nOfReactions; ++i)
+    {
+      heatRelSave[i] = fReaction->CompDetailedHeatRelease (i,
+		   fReaction->GetReactionRate()->vec[i],
+	       	   fSpecies->GetEnthalpy()->vec,
+		   fSpecies->GetMolarMass()->vec);
+    }
+  //PP
+
+  Free1DArray (sink);
+  Free1DArray (source);
+
+}
+
+void T0DIsoChor::RestoreSolution (int count, Double & time, Double * y)
+{
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  Double **Y = fSolMassFracs->mat;
+	int		nSootMoments;
+	Double	**mom;
+
+	if ( fSoot ) {
+		nSootMoments = fSoot->GetNSootMoments();
+		mom = fSolSootMoments->mat;
+	}
+
+  time = fSolTime->vec[count];
+
+  for (int i = 0; i < nOfSpeciesIn; ++i)
+    {
+      y[fFirstSpecies + i] = Y[count][i];
+    }
+
+  y[fTemperature] = fSolTemp->vec[count];
+
+	if ( fSoot ) {
+		Double	mixMolarMass;
+		fProperties->ComputeMixtureMolarMass( mixMolarMass, Y[count], fSpecies->GetMolarMass()->vec, nOfSpeciesIn );
+		for ( int i = 0; i < nSootMoments; ++i ) {
+			y[fSootMoments+i] = mom[count][i] / ( fProperties->GetPressureRef() * mixMolarMass ) 
+								* ( RGAS * y[fTemperature] );
+		}
+	}
+
+	fActLength = 0;
+}
+
+void T0DIsoChor::Reduce( void )
+{
+	int		i, j;
+	int		i2;
+	int		toLength = ( fSolMassFracs->cols + 1 ) / 2;
+  int nOfSpecies = fSolMassFracs->rows;
+  Double **Y = fSolMassFracs->mat;
+  Double *time = fSolTime->vec;
+  Double *temp = fSolTemp->vec;
+
+  for (i = 0; i < toLength; ++i)
+    {
+      i2 = 2 * i;
+      for (j = 0; j < nOfSpecies; ++j)
+	{
+	  Y[i][j] = Y[i2][j];
+	}
+		if ( fSoot ) {
+			for ( j = 0; j < fSoot->GetNSootMoments(); ++j ) {
+				fSolSootMoments->mat[i][j] = fSolSootMoments->mat[i2][j];
+			}
+		}
+      time[i] = time[i2];
+      temp[i] = temp[i2];
+    }
+  if (fAdditionalOutput)
+    {
+      ReduceAdditional (toLength);
+    }
+
+  fActLength = toLength;
+  fDeltaStepSave *= 2;
+}
+
+void T0DIsoChor::ReduceAdditional (int toLength)
+{
+  int i, j;
+  int i2;
+  int nOfSpecies = fEpsilonM1->rows;
+  int detPRLen = fDetProdRate->rows;
+  int reacRateSaveLen = fReacRateSave->rows;
+  Double **conspro = fConsPro->mat;
+  Double **epsM1 = fEpsilonM1->mat;
+  Double *heatRel = fHeatRelease->vec;
+  Double **detPR = fDetProdRate->mat;
+  Double **reacRateSave = fReacRateSave->mat;
+
+  //PP
+  int heatRelSaveLen = fHeatRelSave->rows;
+  Double **heatRelSave = fHeatRelSave->mat;
+  //PP
+
+  for (i = 0; i < toLength; ++i)
+    {
+      i2 = 2 * i;
+      for (j = 0; j < nOfSpecies; ++j)
+	{
+	  epsM1[i][j] = epsM1[i2][j];
+	  conspro[i][3 * j] = conspro[i2][3 * j];
+	  conspro[i][3 * j + 1] = conspro[i2][3 * j + 1];
+	  conspro[i][3 * j + 2] = conspro[i2][3 * j + 2];
+	}
+      for (j = 0; j < detPRLen; ++j)
+	{
+	  detPR[i][j] = detPR[i2][j];
+	}
+      for (j = 0; j < reacRateSaveLen; ++j)
+	{
+	  reacRateSave[i][j] = reacRateSave[i2][j];
+	}
+
+      //PP
+      for (j = 0; j < heatRelSaveLen; ++j)
+	{
+	  heatRelSave[i][j] = heatRelSave[i2][j];
+	}
+      //PP
+
+      heatRel[i] = heatRel[i2];
+    }
+}
+
+void Res0DIsoBar( Double */*T*/, Double *y, Double *yPrime, Double *delta
+			, int */*iRes*/, Double */*rPar*/, int *iPar )
+{
+	T0DIsoChorPtr		flame = ( T0DIsoChorPtr ) iPar;
+	T0DSpeciesPtr		species = flame->GetSpecies();
+	T0DPropertiesPtr	props = flame->GetProperties();
+	int					i, ieq;
+	int					firstSpec = flame->fFirstSpecies;
+	int					fTemp = flame->fTemperature;
+	int					nSpeciesIn = species->GetNSpeciesInSystem();
+	Double				temp = y[fTemp];
+	Double				*YF = &y[firstSpec];
+	Double				*nY = flame->fSolMassFracs->mat[flame->fActLength];
+	Double				*prodRate = species->GetProductionRate()->vec;
+	Double				*enth = species->GetEnthalpy()->vec;
+	Double				*molarMass = species->GetMolarMass()->vec;
+	Double				sum = 0.0;	
+
+	if ( flame->GetSoot() ) {
+		fprintf( stderr, "###error: no soot here ..." );
+		exit( 2 );
+	}
+
+	copy( nSpeciesIn, YF, 1, nY, 1 );
+
+	if ( temp < 600.0 ) flame->fArtificialSource = 0.0;
+	flame->UpdateThermoProps( nY, temp, props->GetPressureRef(), props->GetDensityRef()
+									, kDensFromPress, NULL );
+
+	Double				rho = props->GetDensity();
+	Double				heatCap = props->GetMixHeatCapacity();
+	Double				mixMolarMass = props->GetMixMolarMass();
+
+	for ( i = 0; i < nSpeciesIn; ++i ) {
+      ieq = firstSpec + i;
+      sum += prodRate[i] * enth[i];
+    }
+	for ( i = 0; i < nSpeciesIn; ++i ) {
+		ieq = firstSpec + i;
+		delta[ieq] = yPrime[ieq] - prodRate[i] / rho;
+	}
+
+	delta[fTemp] = yPrime[fTemp] + ( sum + flame->fArtificialSource ) / ( rho * heatCap );
+}
+
+int Res0DIsoBarCV( realtype /*T*/, N_Vector u, N_Vector udot, void *data )
+{
+	T0DIsoChorPtr		flame = ( T0DIsoChorPtr ) data;
+	T0DSpeciesPtr		species = flame->GetSpecies();
+	T0DPropertiesPtr	props = flame->GetProperties();
+	int					i, ieq;
+	int					firstSpec = flame->fFirstSpecies;
+	int					fTemp = flame->fTemperature;
+	int					nSpeciesIn = species->GetNSpeciesInSystem();
+
+	Double				*y = NV_DATA_S(u);
+	Double				*delta = NV_DATA_S(udot);
+
+	Double				temp = y[fTemp];
+	Double				*YF = &y[firstSpec];
+	Double				*nY = flame->fSolMassFracs->mat[flame->fActLength];
+	Double				*prodRate = species->GetProductionRate()->vec;
+	Double				*enth = species->GetEnthalpy()->vec;
+	Double				*molarMass = species->GetMolarMass()->vec;
+	Double				sum = 0.0;	
+
+	if ( flame->GetSoot() ) {
+		fprintf( stderr, "###error: no soot here ..." );
+		exit( 2 );
+	}
+
+	copy( nSpeciesIn, YF, 1, nY, 1 );
+
+	if ( temp < 600.0 ) flame->fArtificialSource = 0.0;
+	flame->UpdateThermoProps( nY, temp, props->GetPressureRef(), props->GetDensityRef()
+									, kDensFromPress, NULL );
+
+	Double				rho = props->GetDensity();
+	Double				heatCap = props->GetMixHeatCapacity();
+	Double				mixMolarMass = props->GetMixMolarMass();
+
+	for ( i = 0; i < nSpeciesIn; ++i ) {
+      ieq = firstSpec + i;
+      sum += prodRate[i] * enth[i];
+    }
+	for ( i = 0; i < nSpeciesIn; ++i ) {
+		ieq = firstSpec + i;
+		delta[ieq] = prodRate[i] / rho;
+	}
+
+	delta[fTemp] = -( sum + flame->fArtificialSource ) / ( rho * heatCap );
+
+	return 0;
+}
+
+int Res0DIsoChorCV( realtype /*T*/, N_Vector u, N_Vector udot, void *data )
+{
+  T0DIsoChorPtr flame = (T0DIsoChorPtr) data;
+  T0DSpeciesPtr species = flame->GetSpecies ();
+  T0DPropertiesPtr props = flame->GetProperties ();
+  int i, ieq;
+  int firstSpec = flame->fFirstSpecies;
+  int fTemp = flame->fTemperature;
+  int nSpeciesIn = species->GetNSpeciesInSystem ();
+
+	Double				*y = NV_DATA_S(u);
+	Double				*delta = NV_DATA_S(udot);
+
+  Double temp = y[fTemp];
+  Double *YF = &y[firstSpec];
+
+  Double *nY = flame->fSolMassFracs->mat[flame->fActLength];
+  Double *prodRate = species->GetProductionRate ()->vec;
+  Double *enth = species->GetEnthalpy ()->vec;
+  Double *molarMass = species->GetMolarMass ()->vec;
+  Double sum = 0.0;
+  Double RT = RGAS * temp;
+	Double				*moments;
+	Double				*MOverRho;
+	int					nSootMoments, sootOff;
+	Double				rho = props->GetDensity();
+
+
+	copy( nSpeciesIn, YF, 1, nY, 1 );
+	if ( flame->GetSoot() ) {
+		moments = flame->fSolSootMoments->mat[flame->fActLength];
+		nSootMoments = flame->GetSoot()->GetNSootMoments();
+		sootOff = flame->GetSoot()->GetOffsetSootMoments();
+
+		MOverRho = &y[sootOff];
+		flame->GetSoot()->MOverRhoToM( MOverRho, moments, nSootMoments
+				, props->GetDensity() );
+
+	}
+
+//	fprintf(stderr, "Temp\t%g\n", temp );
+//	for ( i = 0; i < nSpeciesIn; ++i ) {
+//		fprintf(stderr, "%s\t%g\n", species->GetNames()[i], nY[i] );
+//    }
+
+	flame->UpdateThermoProps( nY, temp, props->GetPressureRef(), props->GetDensityRef()
+									, kPressFromDens, ( flame->GetSoot() ) ? moments : NULL );
+
+	Double				heatCap = props->GetMixHeatCapacity();
+	Double				mixMolarMass = props->GetMixMolarMass();
+
+	for ( i = 0; i < nSpeciesIn; ++i ) {
+		ieq = firstSpec + i;
+		delta[ieq] = prodRate[i] / rho;
+		sum += ( enth[i] - RT / molarMass[i] ) * prodRate[i];
+    }
+
+  delta[fTemp] = sum / ( rho * ( RGAS / mixMolarMass - heatCap ) );
+
+	if ( flame->GetSoot() ) {
+		flame->GetSoot()->ComputePolymereConcs( nY, temp, rho, molarMass
+				, flame->GetSoot()->GetPij()->mat, flame->GetSoot()->GetSumPi()->vec, flame->GetSoot()->GetPAHMoments()->vec
+				, moments, flame->GetReaction() );
+		flame->GetSoot()->UpdateSoot( flame->GetReaction(), species, moments, temp, nY, rho
+							, mixMolarMass );
+		for ( i = 0; i < nSootMoments; ++i ) {
+			ieq = sootOff + i;
+			
+			delta[ieq] = 0.0; 
+				 
+			if ( flame->GetSoot()->WithNucleation() ) {
+					delta[ieq] += flame->GetSoot()->NucleationNew( i, temp
+						, flame->GetSoot()->GetPAHMoments()->vec ) / rho;
+			}
+			if ( flame->GetSoot()->WithCoagulation() ) {
+					delta[ieq] += flame->GetSoot()->SourceCoagulationNew( i, temp
+										, moments ) / rho;
+			}
+			if ( flame->GetSoot()->WithCondensation() ) {
+				delta[ieq] += flame->GetSoot()->SourceCondensationNew( i, temp
+									, flame->GetSoot()->GetPAHMoments()->vec, moments
+									,  nY, rho, molarMass ) / rho;
+				}
+				if ( flame->GetSoot()->WithSurfaceGrowth() ) {
+					delta[ieq] += flame->GetSoot()->SourceSurfGrowthNew( i, moments, nY, rho, molarMass ) / rho;
+				}
+				if ( flame->GetSoot()->WithSurfaceOxidation() ) {
+					delta[ieq] += flame->GetSoot()->SourceSootOxidationNew( i, moments, nY, rho, molarMass ) / rho;
+				}
+				
+			}	
+		}	
+
+	return 0;
+}
+
+void Res0DIsoChor (Double * /*T*/, Double * y, Double * yPrime, Double * delta,
+	      int * /*iRes */ , Double * /*rPar */ , int *iPar)
+{
+  T0DIsoChorPtr flame = (T0DIsoChorPtr) iPar;
+  T0DSpeciesPtr species = flame->GetSpecies ();
+  T0DPropertiesPtr props = flame->GetProperties ();
+  int i, ieq;
+  int firstSpec = flame->fFirstSpecies;
+  int fTemp = flame->fTemperature;
+  int nSpeciesIn = species->GetNSpeciesInSystem ();
+  Double temp = y[fTemp];
+  Double *YF = &y[firstSpec];
+  Double *nY = flame->fSolMassFracs->mat[flame->fActLength];
+  Double *prodRate = species->GetProductionRate ()->vec;
+  Double *enth = species->GetEnthalpy ()->vec;
+  Double *molarMass = species->GetMolarMass ()->vec;
+  Double sum = 0.0;
+  Double RT = RGAS * temp;
+	Double				*moments;
+	Double				*MOverRho;
+	int					nSootMoments, sootOff;
+	Double				rho = props->GetDensity();
+
+
+	copy( nSpeciesIn, YF, 1, nY, 1 );
+	if ( flame->GetSoot() ) {
+		moments = flame->fSolSootMoments->mat[flame->fActLength];
+		nSootMoments = flame->GetSoot()->GetNSootMoments();
+		sootOff = flame->GetSoot()->GetOffsetSootMoments();
+
+		MOverRho = &y[sootOff];
+		flame->GetSoot()->MOverRhoToM( MOverRho, moments, nSootMoments
+				, props->GetDensity() );
+
+	}
+
+
+	flame->UpdateThermoProps( nY, temp, props->GetPressureRef(), props->GetDensityRef()
+									, kPressFromDens, ( flame->GetSoot() ) ? moments : NULL );
+
+	Double				heatCap = props->GetMixHeatCapacity();
+	Double				mixMolarMass = props->GetMixMolarMass();
+
+	for ( i = 0; i < nSpeciesIn; ++i ) {
+		ieq = firstSpec + i;
+		delta[ieq] = yPrime[ieq] - prodRate[i] / rho;
+		sum += ( enth[i] - RT / molarMass[i] ) * prodRate[i];
+    }
+
+  delta[fTemp] = yPrime[fTemp]
+				- sum / ( rho * ( RGAS / mixMolarMass - heatCap ) );
+
+	if ( flame->GetSoot() ) {
+		flame->GetSoot()->ComputePolymereConcs( nY, temp, rho, molarMass
+				, flame->GetSoot()->GetPij()->mat, flame->GetSoot()->GetSumPi()->vec, flame->GetSoot()->GetPAHMoments()->vec
+				, moments, flame->GetReaction() );
+		flame->GetSoot()->UpdateSoot( flame->GetReaction(), species, moments, temp, nY, rho
+							, mixMolarMass );
+		for ( i = 0; i < nSootMoments; ++i ) {
+			ieq = sootOff + i;
+			
+			delta[ieq] = yPrime[ieq]; 
+				 
+			if ( flame->GetSoot()->WithNucleation() ) {
+					delta[ieq] -= flame->GetSoot()->NucleationNew( i, temp
+						, flame->GetSoot()->GetPAHMoments()->vec ) / rho;
+			}
+			if ( flame->GetSoot()->WithCoagulation() ) {
+					delta[ieq] -= flame->GetSoot()->SourceCoagulationNew( i, temp
+										, moments ) / rho;
+			}
+			if ( flame->GetSoot()->WithCondensation() ) {
+				delta[ieq] -= flame->GetSoot()->SourceCondensationNew( i, temp
+									, flame->GetSoot()->GetPAHMoments()->vec, moments
+									,  nY, rho, molarMass ) / rho;
+				}
+				if ( flame->GetSoot()->WithSurfaceGrowth() ) {
+					delta[ieq] -= flame->GetSoot()->SourceSurfGrowthNew( i, moments, nY, rho, molarMass ) / rho;
+				}
+				if ( flame->GetSoot()->WithSurfaceOxidation() ) {
+					delta[ieq] -= flame->GetSoot()->SourceSootOxidationNew( i, moments, nY, rho, molarMass ) / rho;
+				}
+				
+			}	
+		}	
+}
+
+void T0DIsoChor::SetInfo (void)
+{
+  fInfo[1 - 1] = 0;		// first call
+  fInfo[2 - 1] = 0;		// RTOL, ATOL are scalars
+  fInfo[3 - 1] = 1;		// solution at TOUT, no intermediates
+  fInfo[4 - 1] = 0;		// integration can be carried out beyond TOUT ( and interpolated )
+  fInfo[5 - 1] = 0;		// numerical jacobian
+  fInfo[6 - 1] = 0;		// full ( not banded ) jacobian
+  fInfo[7 - 1] = 1;		// no choice for maximum stepsize
+  fInfo[8 - 1] = 1;		// no choice for first stepsize
+  if (fMaxOrd == 5)
+    {
+      fInfo[9 - 1] = 0;		// choose default for MAXORD ( = 5 )
+    }
+  else
+    {
+      fInfo[9 - 1] = 1;		// don't choose default for MAXORD ( = 5 )
+    }
+  fInfo[10 - 1] = 0;		// solve without non negative constraint
+  fInfo[11 - 1] = 1;		// initial values are consistent
+}
+
+void T0DIsoChor::WriteSolution (char *tail)
+{
+  if (fWriteSolution)
+    {
+      int i, k, ifiles, maxCols = 10000;
+      int nOfSpecies = fSpecies->GetNOfSpecies ();
+      int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+      int nFiles = nOfSpecies / maxCols + 1;
+      Double *time = fSolTime->vec;
+      Double M;
+      Double *M_i = fSpecies->GetMolarMass ()->vec;
+      Double *T = fSolTemp->vec;
+      Double **Y = fSolMassFracs->mat;
+		Double		**mom;
+      FILE *fp;
+      FILE *fpX, *fpC;
+      int nspecmin, nspecmax = 0;
+      char pref[8];
+      Flag bigg;
+
+		if ( fSoot ) {
+			mom = fSolSootMoments->mat;
+		}
+
+      /* checkit */
+		for ( i = 0; i < nOfSpecies; ++i ){
+		  	if ( Y[fActLength-1][i] >= 1.0e-10 ) {
+	      // fprintf( stderr, "## warning: Yend-%-10s = %g\n", fSpecies->GetNames()[i], Y[fActLength-1][i] );
+	    }
+	  bigg = FALSE;
+	  Double lim = 1.0e-12;
+	  for (k = 0; k < fActLength; ++k)
+	    {
+	      if (Y[k][i] > lim)
+		{
+		  bigg = TRUE;
+		  break;
+		}
+	    }
+	  if (bigg == FALSE)
+	    {
+	      // fprintf( stderr, "species %-10s always < %g\n", fSpecies->GetNames()[i], lim );
+	    }
+
+	  bigg = FALSE;
+	  Double limNow = 0.01;
+	  for (k = 0; k < fActLength; ++k)
+	    {
+	      if (Y[k][i] > limNow)
+		{
+		  bigg = TRUE;
+		  break;
+		}
+	    }
+	  if (fSpecies->IsSteadyState (i) && bigg == TRUE)
+	    {
+	      fprintf (stderr, "steady state species %-10s > %g\n",
+		       fSpecies->GetNames ()[i], limNow);
+	    }
+	}
+
+      for (ifiles = 0; ifiles < nFiles; ++ifiles)
+	{
+	  nspecmin = nspecmax;
+	  nspecmax += maxCols;
+	  nspecmax = minint (nspecmax, nOfSpecies);
+	  sprintf (pref, "Y%d", ifiles + 1);
+	  fp = GetOutputFile (pref, tail, TFlame::kData);
+	  if (fPrintMolarFractions)
+	    {
+	      sprintf (pref, "X%d", ifiles + 1);
+	      fpX = GetOutputFile (pref, tail, TFlame::kData);
+	      sprintf (pref, "C%d", ifiles + 1);
+	      fpC = GetOutputFile (pref, tail, TFlame::kData);
+	    }
+	  Double pressure;
+	  Double rho;
+
+	  if (fType == kHomoIsoChor)
+	    {
+	      rho = fProperties->GetDensity ();
+	    }
+	  else
+	    {
+	      pressure = fProperties->GetPressureRef ();
+	    }
+
+	  fprintf (fp, "*\n%-12s\t%-12s", "t[ms]", "T[K] ");
+			if ( fSoot && ifiles == 0 ) {
+				for ( i = 0; i < fSoot->GetNSootMoments(); ++i ) {
+					fprintf( fp, "\t%-12s", fVariableNames[i+fSootMoments] );
+				}
+			}
+	  for (i = nspecmin; i < nspecmax; ++i)
+	    {
+	      fprintf (fp, "\tY-%-10s", fSpecies->GetNames ()[i]);
+	    }
+	  if (fPrintMolarFractions)
+	    {
+	      fprintf (fpX, "*\n%-12s\t%-12s", "t[ms]", "T[K]");
+	      fprintf (fpC, "*\n%-12s\t%-12s", "t[ms]", "T[K]");
+
+	      for (i = nspecmin; i < nspecmax; ++i)
+		{
+		  fprintf (fpX, "\tX-%-10s", fSpecies->GetNames ()[i]);
+		}
+	      for (i = nspecmin; i < nspecmax; ++i)
+		{
+		  fprintf (fpC, "\tC-%-10s", fSpecies->GetNames ()[i]);
+		}
+	    }
+	  if (fType == kHomoIsoChor)
+	    {
+	      fprintf (fp, "\t%-12s", "P[bar]");
+	    }
+	  else
+	    {
+	      fprintf (fp, "\t%-12s", "density[kg/m^3]");
+	    }
+	  fprintf (fp, "\t%-12s", "molarmass[kg/mole]");
+
+	  for (k = 0; k < fActLength; ++k)
+	    {
+	      fProperties->ComputeMixtureMolarMass (M, Y[k], M_i,
+						    nOfSpeciesIn);
+	      if (fType == kHomoIsoBar)
+		{
+		  rho = pressure * M / (RGAS * T[k]);
+		}
+	      fprintf (fp, "\n%-12E\t%-12E", time[k] * 1000.0, T[k]);
+				if ( fSoot && ifiles == 0 ) {
+					for ( i = 0; i < fSoot->GetNSootMoments(); ++i ) {
+						fprintf( fp, "\t%-12E", mom[k][i] );
+					}
+				}
+	      for (i = nspecmin; i < nspecmax; ++i)
+		{
+		  fprintf (fp, "\t%-12E", Y[k][i]);
+		}
+	      if (fPrintMolarFractions)
+		{
+		  //fprintf( fpX, "\n%-12E", time[k] * 1000.0 );
+		  //fprintf( fpC, "\n%-12E", time[k] * 1000.0 );
+		  fprintf (fpX, "\n%-12E\t%-12E", time[k] * 1000.0, T[k]);
+		  fprintf (fpC, "\n%-12E\t%-12E", time[k] * 1000.0, T[k]);
+		  for (i = nspecmin; i < nspecmax; ++i)
+		    {
+		      fprintf (fpX, "\t%-12E", Y[k][i] * M / M_i[i]);
+		    }
+		  for (i = nspecmin; i < nspecmax; ++i)
+		    {
+		      fprintf (fpC, "\t%-12E", Y[k][i] * rho / M_i[i]);
+		    }
+		}
+	      if (fType == kHomoIsoChor)
+		{
+		  fprintf (fp, "\t%-12E", (1.0e-5 * RGAS * rho * T[k]) / M);
+		}
+	      else
+		{
+		  fprintf (fp, "\t%-12E", rho);
+		}
+	      fprintf (fp, "\t%-12E", M);
+	    }
+	  // write equilibrium data
+#ifdef WRITEEQUILIBRIUM
+	  Double tempEqui = 300.0;
+	  Double *massFracsEqui = New1DArray (nOfSpeciesIn);
+	  Double sumit = 0.0;
+	  tempEqui = GetEquilibrium (tempEqui, massFracsEqui);
+	  fprintf (fp, "\n%-12E\t%-12E", time[fActLength - 1] * 1000.0,
+		   tempEqui);
+	  for (i = 0; i < nOfSpecies; ++i)
+	    {
+	      fprintf (fp, "\t%-12E", massFracsEqui[i]);
+	      sumit += massFracsEqui[i];
+	    }
+
+	  fprintf (stderr,
+		   "Adiabatic equilibrium temperature is Tad = %g K\n",
+		   tempEqui);
+	  fprintf (stderr, "Sum of mass fractions is %g\n", sumit);
+	  Free1DArray (massFracsEqui);
+#endif
+	  fprintf (fp, "\n");
+
+
+	  fclose (fp);
+	  if (fPrintMolarFractions)
+	    {
+	      fprintf (fpX, "\n");
+	      fprintf (fpC, "\n");
+	      fclose (fpX);
+	      fclose (fpC);
+	    }
+	}
+    }
+
+  if (fAdditionalOutput)
+    {
+      PrintAdditional (tail);
+    }
+}
+
+void T0DIsoChor::WriteFlameletFile (char *tail)
+{
+  if (fWriteSolution && fType == kHomoIsoBar)
+    {
+      int i, k;
+      int nOfSpecies = fSpecies->GetNOfSpecies ();
+      int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+      Double *time = fSolTime->vec;
+      Double M;
+      Double *M_i = fSpecies->GetMolarMass ()->vec;
+      Double *T = fSolTemp->vec;
+      Double **Y = fSolMassFracs->mat;
+      FILE *fp;
+      char pref[8];
+      time_t theDate;
+
+      fp = GetOutputFile ("FL", tail, TFlame::kText);
+      Double pressure;
+      Double rho;
+      Double sL = 0.01;
+      int actlenhere = (fActLength % 2 == 0) ? fActLength - 1 : fActLength;
+      pressure = fProperties->GetPressureRef ();
+
+      /* header */
+      fprintf (fp, "header\n\n");
+
+      fprintf (fp,
+	       "title = \"unstretched freely propagating premixed flame\"\n");
+
+      for (i = 0; i < GetNFuels (); ++i)
+	{
+	  fprintf (fp, "fuel = \"%s\"\n",
+		   fSpecies->GetNames ()[GetFuelIndex (i)]);
+	}
+      fprintf (fp, "pressure = %g [bar]\n", pressure / 1.0e5);
+      fprintf (fp, "fuel-air-equivalence-ratio = %g\n", GetPhi ());
+
+      fprintf (fp, "unburnt\n");
+      fprintf (fp, "begin\n");
+      fprintf (fp, "\tTemperature = %g [K]\n", T[0]);
+      for (i = 0; i < nOfSpecies; ++i)
+	{
+	  if (fabs (Y[0][i]) > 1.0e-4)
+	    {
+	      fprintf (fp, "\tMassfraction-%s = %g\n",
+		       fSpecies->GetNames ()[i], Y[0][i]);
+	    }
+	}
+      fprintf (fp, "end\n\n");
+
+      fprintf (fp, "numOfSpecies = %d\n", nOfSpecies);
+      fprintf (fp, "gridPoints = %d\n\n", actlenhere);
+
+      fProperties->ComputeMixtureMolarMass (M, Y[0], M_i, nOfSpeciesIn);
+      rho = pressure * M / (RGAS * T[0]);
+      fprintf (fp, "massFlowRate = %g\n", sL * rho);
+      fprintf (fp, "v298 = %g\n\n", sL * T[0] / 298.0);
+
+      fprintf (fp, "body\n");
+
+      // write independent coordinate
+      Double sLmrho0 = 0.01;
+      Double *xx = New1DArray (actlenhere);
+      Double *dens = New1DArray (actlenhere);
+
+
+      xx[0] = 0.0;
+      fProperties->ComputeMixtureMolarMass (M, Y[0], M_i, nOfSpeciesIn);
+      dens[0] = pressure * M / (RGAS * T[0]);
+      sLmrho0 *= 0.5 * dens[0];
+      for (k = 1; k < actlenhere; ++k)
+	{
+	  fProperties->ComputeMixtureMolarMass (M, Y[k], M_i, nOfSpeciesIn);
+	  dens[k] = pressure * M / (RGAS * T[k]);
+	  xx[k] =
+	    xx[k - 1] + (time[k] - time[k - 1]) * (sLmrho0 / dens[k] +
+						   sLmrho0 / dens[k - 1]);
+	}
+
+      fprintf (fp, "y [m]\n");
+      for (k = 0; k < actlenhere; ++k)
+	{
+	  fprintf (fp, "\t%-.6e", xx[k]);
+	  if ((k + 1) % 5 == 0)
+	    {
+	      fprintf (fp, "\n");
+	    }
+	}
+      if ((k) % 5)
+	{
+	  fprintf (fp, "\n");
+	}
+
+      sLmrho0 *= 2.0;
+      fprintf (fp, "massflowrate [kg/m^2s]\n");
+      for (k = 0; k < actlenhere; ++k)
+	{
+	  fprintf (fp, "\t%-.6e", sLmrho0);
+	  if ((k + 1) % 5 == 0)
+	    {
+	      fprintf (fp, "\n");
+	    }
+	}
+      if ((k) % 5)
+	{
+	  fprintf (fp, "\n");
+	}
+
+      fprintf (fp, "temperature [K]\n");
+      for (k = 0; k < actlenhere; ++k)
+	{
+	  fprintf (fp, "\t%-.6e", T[k]);
+	  if ((k + 1) % 5 == 0)
+	    {
+	      fprintf (fp, "\n");
+	    }
+	}
+      if ((k) % 5)
+	{
+	  fprintf (fp, "\n");
+	}
+
+      for (i = 0; i < nOfSpeciesIn; ++i)
+	{
+	  fprintf (fp, "massfraction-%s\n", fSpecies->GetNames ()[i]);
+	  for (k = 0; k < actlenhere; ++k)
+	    {
+	      fprintf (fp, "\t%-.6e", MAX (1.0e-60, Y[k][i]));
+	      if ((k + 1) % 5 == 0)
+		{
+		  fprintf (fp, "\n");
+		}
+	    }
+	  if ((k) % 5)
+	    {
+	      fprintf (fp, "\n");
+	    }
+	}
+
+      fprintf (fp, "density\n");
+      for (k = 0; k < actlenhere; ++k)
+	{
+	  fprintf (fp, "\t%-.6e", dens[k]);
+	  if ((k + 1) % 5 == 0)
+	    {
+	      fprintf (fp, "\n");
+	    }
+	}
+      if ((k) % 5)
+	{
+	  fprintf (fp, "\n");
+	}
+
+      fprintf (fp, "trailer\n");
+      fclose (fp);
+    }
+}
+void T0DIsoChor::PrintAdditional (char *tail)
+{
+  // PrintDetProdRate( tail );
+  PrintIntProdRate (tail);
+  PrintReacRateSave( tail );
+  PrintHeatRelSave( tail );
+  // PP
+  PrintReacRateSaveBin( tail );
+  PrintHeatRelSaveBin( tail );
+}
+
+void T0DIsoChor::PrintReacRateSave (char *tail)
+{
+  int i, k;
+  int nOfReaction = fReaction->GetNOfReactions ();
+  Double *time = fSolTime->vec;
+  Double **reacRateSave = fReacRateSave->mat;
+  FILE *fp = GetOutputFile ("ReacRate", tail, TFlame::kData);
+  char **label = fReaction->GetLabels ();
+  char reac[128];
+
+  fprintf (fp, "*\n%-12s", "t [ms]");
+  cerr << "print reaction rates" << NEWL;
+
+  for (i = 0; i < nOfReaction; ++i)
+    {
+      fprintf (fp, "\t%s", label[i]);
+    }
+
+  for (k = 0; k < fActLength; ++k)
+    {
+      fprintf (fp, "\n%-12E", time[k] * 1000.0);
+      for (i = 0; i < nOfReaction; ++i)
+	{
+	  fprintf (fp, "\t%-12E", MAX (1.0e-15, reacRateSave[k][i]));
+	}
+    }
+
+  fprintf (fp, "\n");
+
+  fclose (fp);
+}
+
+void T0DIsoChor::PrintReacRateSaveBin (char *tail)
+{
+  int i, k, ifiles;
+  int nOfReaction = fReaction->GetNOfReactions ();
+  Double *time = fSolTime->vec;
+  Double **reacRateSave = fReacRateSave->mat;
+  FILE *fp;
+  FILE *header;
+  char **label = fReaction->GetLabels ();
+  Double ftmp;
+  int itmp;
+
+  cerr << "print reaction rates in binary format" << NEWL;
+  
+  // print header file
+  header = GetOutputFile ("Header", tail, TFlame::kData);
+  fprintf (header, "%-12s", "t [ms]");  
+  for (i = 0; i < nOfReaction; ++i) 
+    {
+      fprintf (header, "\t%s", label[i]);
+    }
+  fclose(header);
+
+  // print binary reaction rate files
+  fp = GetOutputFile ("ReacRate", tail, TFlame::kBin);
+
+  fwrite(&nOfReaction, sizeof(int),1, fp); // index of last column
+  itmp = fActLength-1; fwrite(&itmp, sizeof(int),1, fp); // index of last row
+
+  for (k = 0; k < fActLength; ++k)
+    {
+      ftmp  = time[k]*1000.0;
+      fwrite(&ftmp, sizeof(Double),1, fp);
+      for (i = 0; i < nOfReaction; ++i)
+	{
+	  ftmp = MAX (1.0e-15, reacRateSave[k][i]);
+	  fwrite(&ftmp, sizeof(Double),1, fp);
+	}
+    }
+  fclose (fp);
+}
+
+void T0DIsoChor::PrintEpsilonM1 (char *tail)
+{
+  int i, k;
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  Double *time = fSolTime->vec;
+  Double **epsM1 = fEpsilonM1->mat;
+  FILE *fp = GetOutputFile ("EpsM1", tail, TFlame::kData);
+
+  fprintf (fp, "*\n%-12s", "t [ms]");
+
+  for (i = 0; i < nOfSpeciesIn; ++i)
+    {
+      fprintf (fp, "\t%-10s", fSpecies->GetNames ()[i]);
+    }
+
+  cerr << "print epsm1" << NEWL;
+  for (k = 0; k < fActLength; ++k)
+    {
+      fprintf (fp, "\n%-12E", time[k] * 1000.0);
+      for (i = 0; i < nOfSpeciesIn; ++i)
+	{
+	  fprintf (fp, "\t%-12E", epsM1[k][i]);
+	}
+    }
+  fprintf (fp, "\n");
+
+  fclose (fp);
+}
+
+#ifdef WRITEEQUILIBRIUM
+Double T0DIsoChor::GetEquilibrium (Double temp, Double * massFracs)
+{
+  int i;
+  int nndd = 7;
+  int nSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+
+  Double *xmol_i = fSpecies->GetMolarMass ()->vec;
+  Double p = fProperties->GetPressureRef () * 1.0e-5;
+  char *symbol = new char[(nSpeciesIn + 4) * 20];
+  Double *ponalo = new Double[nSpeciesIn * nndd];
+  Double *ponahi = new Double[nSpeciesIn * nndd];
+  Double totent;
+  Double **lowVals = fSpecies->GetCoeffLow ()->mat;
+  Double **highVals = fSpecies->GetCoeffHigh ()->mat;
+  MatrixPtr lowMat =
+    FortranToCMat (ponalo, nndd, nndd, nSpeciesIn, nSpeciesIn);
+  MatrixPtr highMat =
+    FortranToCMat (ponahi, nndd, nndd, nSpeciesIn, nSpeciesIn);
+  Double **low = lowMat->mat;
+  Double **high = highMat->mat;
+  Double dummyZ = -1.0;
+  Double tempguess;
+
+  for (i = 0; i < nSpeciesIn; ++i)
+    {
+      copy (nndd, lowVals[i], 1, low[i], 1);
+      copy (nndd, highVals[i], 1, high[i], 1);
+    }
+
+  CToFortranCharArray (symbol, fSpecies->GetNames (), 20, nSpeciesIn);
+
+  // initial guess
+  copy (nSpeciesIn, fSolMassFracs->mat[fActLength - 1], 1, massFracs, 1);
+  tempguess = temp = fSolTemp->vec[fActLength - 1];
+  fprintf (stderr, "guess temp = %g\n", temp);
+  // calculate total enthalpy
+  Double sumit = 0.0;
+  totent = 0.0;
+  fSpecies->ComputeSpeciesProperties (temp);
+  for (i = 0; i < nSpeciesIn; ++i)
+    {
+      sumit += massFracs[i];
+      totent += massFracs[i] * fSpecies->GetEnthalpy ()->vec[i];
+    }
+  fprintf (stderr, "totent = %g\n", totent);
+  fprintf (stderr, "sumYi = %g\n", sumit);
+  for (i = 0; i < nSpeciesIn; ++i)
+    {
+      fprintf (stderr, "Y[%d:%s] = %g\n", i, fSpecies->GetNames ()[i],
+	       massFracs[i]);
+    }
+
+  totent *= 1.0e-3;
+  ADIABFLAMETEMP (&dummyZ, &nSpeciesIn, massFracs, &tempguess, &p, symbol,
+		  xmol_i, &totent, ponalo, ponahi, &nndd, &temp, massFracs);
+
+
+  sumit = totent = 0.0;
+  fSpecies->ComputeSpeciesProperties (temp);
+  for (i = 0; i < nSpeciesIn; ++i)
+    {
+      sumit += massFracs[i];
+      totent += massFracs[i] * fSpecies->GetEnthalpy ()->vec[i];
+      fprintf (stderr, "Y[%d:%s] = %g\n", i, fSpecies->GetNames ()[i],
+	       massFracs[i]);
+    }
+  fprintf (stderr, "totent = %g\n", totent);
+  fprintf (stderr, "sumYi = %g\n", sumit);
+
+  DisposeFToCMat (highMat);
+  DisposeFToCMat (lowMat);
+
+  return temp;
+}
+#endif
+
+void T0DIsoChor::PrintHeatRelease (char *tail)
+{
+  int k;
+  Double *time = fSolTime->vec;
+  Double *temp = fSolTemp->vec;
+  Double *heatRel = fHeatRelease->vec;
+  FILE *fp = GetOutputFile ("HeatRelease", tail, TFlame::kData);
+  cerr << "print heat release" << NEWL;
+
+  fprintf (fp, "*\n%-12s",
+	   "t [ms]\tTemperature [K]\t1000/T [1/K]\tHeat Release [kJ/m\\u3\\ns]");
+
+  for (k = 0; k < fActLength; ++k)
+    {
+      fprintf (fp, "\n%-12E\t%-12E\t%-12E\t%-12E", time[k] * 1000.0, temp[k],
+	       1000 / temp[k], heatRel[k]);
+    }
+  fprintf (fp, "\n");
+
+  fclose (fp);
+}
+
+void T0DIsoChor::PrintHeatRelSave (char *tail)
+{
+  int i, k;
+  int nOfReaction = fReaction->GetNOfReactions ();
+  Double *time = fSolTime->vec;
+  Double **heatRelSave = fHeatRelSave->mat;
+  FILE *fp = GetOutputFile ("DetHR", tail, TFlame::kData);
+  char **label = fReaction->GetLabels ();
+  char reac[128];
+
+  fprintf (fp, "*\n%-12s", "t [ms]");
+  cerr << "print detailed heat release" << NEWL;
+
+  for (i = 0; i < nOfReaction; ++i)
+    {
+      fprintf (fp, "\t%s", label[i]);
+    }
+
+  for (k = 0; k < fActLength; ++k)
+    {
+      fprintf (fp, "\n%-12E", time[k] * 1000.0);
+      for (i = 0; i < nOfReaction; ++i)
+	{
+	  fprintf (fp, "\t%-12E", heatRelSave[k][i]);
+	}
+    }
+
+  fprintf (fp, "\n");
+
+  fclose (fp);
+
+}
+
+void T0DIsoChor::PrintHeatRelSaveBin (char *tail)
+{
+  int i, k;
+  int nOfReaction = fReaction->GetNOfReactions ();
+  Double *time = fSolTime->vec;
+  Double **heatRelSave = fHeatRelSave->mat;
+  FILE *fp;
+  char **label = fReaction->GetLabels ();
+  Double ftmp;
+  int itmp;
+
+  cerr << "print detailed heat release" << NEWL;
+
+  // print binary reaction rate files
+  fp = GetOutputFile ("DetHR", tail, TFlame::kBin);
+  fwrite(&nOfReaction, sizeof(int),1, fp); // index of last column
+  itmp = fActLength-1; fwrite(&itmp, sizeof(int),1, fp); // index of last row
+
+  for (k = 0; k < fActLength; ++k)
+    {
+      ftmp  = time[k]*1000.0;
+      fwrite(&ftmp, sizeof(Double),1, fp);
+      for (i = 0; i < nOfReaction; ++i)
+	{
+	  ftmp = MAX (1.0e-15, heatRelSave[k][i]);
+	  fwrite(&ftmp, sizeof(Double),1, fp);
+	}
+    }
+  fclose (fp);
+}
+
+void T0DIsoChor::PrintConsPro (char *tail)
+{
+  int i, k;
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  Double *time = fSolTime->vec;
+  Double **conspro = fConsPro->mat;
+  char **names = fSpecies->GetNames ();
+  FILE *fp = GetOutputFile ("CoPro", tail, TFlame::kData);
+
+  fprintf (fp, "*\n%-12s", "t [ms]");
+  cerr << "print cons/prod" << NEWL;
+
+  for (i = 0; i < nOfSpeciesIn; ++i)
+    {
+      fprintf (fp, "\tSo_%-10s\tSi_%-10s\tSu_%-10s", names[i], names[i],
+	       names[i]);
+    }
+
+  for (k = 0; k < fActLength; ++k)
+    {
+      fprintf (fp, "\n%-12E", time[k] * 1000.0);
+      for (i = 0; i < nOfSpeciesIn; ++i)
+	{
+	  fprintf (fp, "\t%-12E\t%-12E\t%-12E",
+		   MAX (1.0e-30, conspro[k][3 * i]), MAX (1.0e-30,
+							  -conspro[k][3 * i +
+								      1]),
+		   MAX (1.0e-30, conspro[k][3 * i + 2]));
+	}
+    }
+  fprintf (fp, "\n");
+
+  fclose (fp);
+}
+
+void T0DIsoChor::PrintDetProdRate (char *tail)
+{
+
+  int i, j, k;
+  int specNum;
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  Double *time = fSolTime->vec;
+  Double **detPR = fDetProdRate->mat;
+  int detPRLen = fDetProdRate->rows;
+  IntVectorPtr *usedReacs = fSpecies->GetUsedReactions ();
+  int *forReac = fReaction->GetForwardReacs ()->vec;
+  int *nUsedReacs = fSpecies->GetNOfUsedReactions ()->vec;
+  char reac[128];
+  FILE *fp = GetOutputFile ("ProRa", tail, TFlame::kData);
+
+  cerr << "print detailed production rates" << NEWL;
+
+  fprintf (fp, "*\n%-12s", "t [ms]");
+
+  for (i = 0; i < fNSensObj; ++i)
+    {
+      if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+	{
+	  for (j = 0; j < nUsedReacs[specNum]; ++j)
+	    {
+	      if (forReac[usedReacs[specNum]->vec[j]] < 0)
+		{		// means this is not a backward reaction
+		  fReaction->PrintReactionEquation (usedReacs[specNum]->
+						    vec[j], fSpecies, reac);
+		  fprintf (fp, "\t%s: %s", fSensObj[i],
+			   fReaction->GetLabels ()[usedReacs[specNum]->vec[j]]);
+		}
+	    }
+	}
+    }
+
+  for (k = 0; k < fActLength; ++k)
+    {
+      fprintf (fp, "\n%-12E", time[k] * 1000.0);
+      for (i = 0; i < detPRLen; ++i)
+	{
+	  fprintf (fp, "\t%-12E", detPR[k][i]);
+	}
+    }
+  fprintf (fp, "\n");
+
+  fclose (fp);
+
+
+}
+
+void T0DIsoChor::PrintIntProdRate (char *tail)
+{
+
+  cerr << "print integrated production rates" << NEWL;
+
+  int i, j, k;
+  int specNum;
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  Double *time = fSolTime->vec;
+  Double **detPR = fDetProdRate->mat;
+  int detPRLen = fDetProdRate->rows;
+  IntVectorPtr *usedReacs = fSpecies->GetUsedReactions ();
+  int *forReac = fReaction->GetForwardReacs ()->vec;
+  int *nUsedReacs = fSpecies->GetNOfUsedReactions ()->vec;
+  char reac[128];
+  int m = 0;
+  VectorPtr intProdRate = NULL;
+  Double deltaT;
+  Double sumIntProdRateForm, sumIntProdRateCons;
+  Double *tmp = New1DArray (fReaction->GetNOfReactions());
+  int maxReaction;
+
+  FILE *fp = GetOutputFile ("IntProRa", tail, TFlame::kText);
+
+  if (detPRLen > 0)
+    {
+      intProdRate = NewVector (detPRLen);
+    }
+
+  for (k = 1; k < fActLength; ++k)
+    {
+      deltaT = (time[k] - time[k - 1]) * 1.0e6;
+      if (time[k] * 1000.0 > 0.0)
+	{
+	  for (j = 0; j < detPRLen; ++j)
+	    {
+	      intProdRate->vec[j] += detPR[k][j] * deltaT;
+	    }
+	}
+    }
+
+  int msave;
+  for (i = 0; i < fNSensObj; ++i)
+    {
+      if ((specNum = fSpecies->FindSpecies (fSensObj[i])) >= 0)
+	{
+	  fprintf (fp, "%s:\n", fSensObj[i]);
+	  msave = m;
+	  sumIntProdRateForm = 0.0;
+	  sumIntProdRateCons = 0.0;
+	  for (j = 0, k = 0; j < nUsedReacs[specNum]; ++j)
+	    {
+	      if (forReac[usedReacs[specNum]->vec[j]] < 0)
+		{ // means this is not a backward reaction
+		  if (intProdRate->vec[m] > 0.0)
+		    {
+		      sumIntProdRateForm += intProdRate->vec[m++];
+		    }
+		  else
+		    {
+		      sumIntProdRateCons += intProdRate->vec[m++];
+		    }
+		}
+	    }
+	  m = msave;
+
+	  // fill temporary array
+	  for (j = 0, k = 0; j < nUsedReacs[specNum]; ++j)
+	    {
+	      if (forReac[usedReacs[specNum]->vec[j]] < 0)
+		{// means this is not a backward reaction
+
+		  tmp[j] = intProdRate->vec[m];
+		  m++;
+		}
+	      else
+		{
+		  tmp[j] = 0;
+		}
+	    }
+
+	  for (j = 0, k = 0; j < nUsedReacs[specNum]; ++j)
+	    {
+	      if (forReac[usedReacs[specNum]->vec[j]] < 0)
+		{// means this is not a backward reaction
+		  
+		  maxReaction = LocationOfAbsMax(nUsedReacs[specNum],tmp);
+	      
+		  if (tmp[maxReaction] != 0.0)
+		    {
+		      fReaction->PrintReactionEquation (usedReacs[specNum]->vec[maxReaction], fSpecies, reac);
+		      fprintf (fp, "\t%12g\t%s:\t%s\n" 
+			       , tmp[maxReaction] / ( ( sumIntProdRateCons ) ? -sumIntProdRateCons : 1.0 )
+			       ,fReaction->GetLabels ()[usedReacs[specNum]->vec[maxReaction]], reac);
+		      
+		      tmp[maxReaction] = 0;
+		    }
+		}
+	    }  
+	}
+    }
+  if (intProdRate)
+    DisposeVector (intProdRate);
+
+  fclose (fp);
+
+}
+
+FILE * T0DIsoChor::GetOutputFile (char *head, char *tail, FileType type)
+{
+  int nOfSpeciesIn = fSpecies->GetNSpeciesInSystem ();
+  char *name = new char[64];
+  FILE *fp;
+
+  sprintf (name, "%s%s%.8s_p%.2dphi%.3dto%.4d%s", (head) ? head : "", (head) ? "_" : "", fSpecies->GetNames ()[GetFuelIndex ()], (int) floor (fInitialPressure * 1.0e-5 + 0.5)	// in [bar]
+	   , (int) floor (GetPhi () * 100 + 0.5), (int) (fSolTemp->vec[0])	// in [K]
+	   , (tail) ? tail : "");
+
+  fp = GetOutfile (name, type);
+  delete name;
+
+  return fp;
+}

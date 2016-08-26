@@ -1,0 +1,41 @@
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/VMS
+END
+build.com
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/VMS/build.com
+END
+mkskel.tpu
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/VMS/mkskel.tpu
+END
+vms-code.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/VMS/vms-code.c
+END
+vms-conf.h
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/VMS/vms-conf.h
+END
+README.VMS
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/VMS/README.VMS
+END
+descrip.mms
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/VMS/descrip.mms
+END

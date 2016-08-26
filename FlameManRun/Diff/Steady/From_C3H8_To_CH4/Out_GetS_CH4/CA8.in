@@ -1,0 +1,6 @@
+RPM = -1
+VarsIn = 6
+Time(s)	Pressure(Pa)	TOx(K)	TFuel(K)	Sci(1/s)	ZR
+0	1e+06	1600	300	1	1
+0.01	800000	1600	300	1	1
+0.02	500000	1600	300	1	1

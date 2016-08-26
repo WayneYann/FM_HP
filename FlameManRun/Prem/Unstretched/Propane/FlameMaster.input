@@ -1,0 +1,96 @@
+############
+# Numerics #
+############
+
+#### Newton solver ####
+
+UseNumericalJac is TRUE
+UseSecondOrdJac is TRUE
+UseModifiedNewton = TRUE
+
+DampFlag = TRUE
+LambdaMin = 1.0e-2
+
+MaxIter = 100
+TolRes = 1.0e-15
+TolDy = 1e-4
+
+#### grid ####
+
+DeltaNewGrid = 25
+OneSolutionOneGrid = TRUE
+initialgridpoints = 89
+maxgridpoints = 139
+q = -0.25
+R = 60
+
+########################
+# Sensitivity Analysis #
+########################
+
+ReactionFluxAnal is TRUE
+
+#######
+# I/O #
+#######
+
+WriteEverySolution = TRUE
+PrintMolarFractions is TRUE
+
+OutputPath is ./Output
+StartProfilesFile is ./C3H8_p01_0phi1_3000tu0298
+
+#############
+# Chemistry #
+#############
+
+MechanismFile is C3H8.82.pre
+globalReaction is C3H8 + 5O2 == 3CO2 + 4H2O;
+
+fuel is C3H8
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+Flame is UnstretchedPremixed
+ExactBackward is TRUE
+
+phi = 1.4
+phi = 1.5
+phi = 1.6
+phi = 1.7
+
+pressure = 1.0e5
+#pressure = 1.3e5
+#pressure = 2.0e5
+
+#ComputeWithRadiation is TRUE
+#Thermodiffusion is TRUE
+
+#######################
+# Boundary conditions #
+#######################
+
+#ConstMassFlux is TRUE
+#MassFlux = 0.3
+
+Unburnt Side {
+	dirichlet {
+		t = 298
+	}
+}
+
+#ContInc = 25
+#ContSide is left
+#ContType is Temperature
+#ContBound = 600.0
+
+#ContBound = 0.05
+#ContInc = 0.001
+#ContSide is left
+#ToSpecies is C3H8
+#FromSpecies is CH4
+
+

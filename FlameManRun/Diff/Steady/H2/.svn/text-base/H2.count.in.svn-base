@@ -1,0 +1,115 @@
+############
+# Numerics #
+############
+
+#### Newton solver ####
+
+#TimeDepFlag        = TRUE
+DeltaTStart        = 1.0E-2
+
+DampFlag          is TRUE
+LambdaMin          = 1.0E-5
+
+UseNumericalJac   is TRUE
+#UseSecOrdJac     is TRUE
+UseModifiedNewton is TRUE
+
+MaxIter            = 1000
+TolRes             = 1.0E-14
+TolDy              = 1.0E-4
+ 
+#### grid ####
+
+OneSolutionOneGrid is TRUE
+maxgridpoints       = 159
+InitialGridPoints   = 100
+DeltaNewGrid        = 15
+R                   = 60.0
+Q                   = -.25
+
+########################
+# Sensitivity Analysis #
+########################
+
+SensAnal is TRUE
+SensObj is T
+SensObj is OH
+
+#######
+# I/O #
+#######
+
+#PrintMolarFractions is TRUE
+
+OutputPath        is OutCount
+StartProfilesFile is ./H2_p01_0a00100_0tf0300to0300
+
+#############
+# Chemistry #
+#############
+
+MechanismFile       is H2.allstar3.pre
+GlobalReaction      is 2H2 + O2 == 2H2O;
+
+fuel                is H2
+oxidizer            is O2
+
+#########
+# Flame #
+#########
+
+Flame               is CounterFlowDiffusion
+
+StrainRate        = 100
+#StrainRate        = 200
+#StrainRate        = 300
+#StrainRate        = 500
+#StrainRate        = 700
+#StrainRate        = 1000
+#StrainRate        = 2000
+#StrainRate        = 3000
+#StrainRate        = 5000
+#StrainRate        = 7000
+#StrainRate        = 10000
+#StrainRate        = 15000
+#StrainRate        = 20000
+#StrainRate        = 25000
+
+WithRadiation       is TRUE
+ThermoDiffusion     is TRUE
+
+Pressure             = 1.0e5
+
+#ConstLewisNumber  is TRUE
+#LewisNumberFile  is LewisH2New
+#LewisNumberFile  is LewisNumberOne
+
+#######################
+# Boundary conditions #
+#######################
+
+leftbc {
+dirichlet {
+	T = 300.0
+	x->H2    = 1.000000
+}
+}
+
+rightbc {
+	dirichlet {
+		T = 300.0
+		x->O2    = 0.210000
+		x->N2    = 0.790000
+	}
+}
+
+#ContType    is velocity
+
+#FromSpecies is H2
+#ToSpecies   is N2
+
+#ContSide    is left
+#ContInc      = 0.1
+#ContBound    = 1.0
+
+

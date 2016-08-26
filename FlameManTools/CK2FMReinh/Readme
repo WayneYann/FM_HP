@@ -1,0 +1,83 @@
+This tool has been provided by Reinhard Seiser from UC San Diego.
+
+A chemkin interpreter program and a series of scripts can be used to convert chemkin format to FlameMaster format. The tool also converts the species names as required and thermo data files. It also re-fits the thermodata for cases where the lower and upper fits don't match at the crossover temperature.
+
+Make sure that your mechanism and thermo files use the Unix type line breaks. If the mechanism files were produced using DOS, the files would have to be converted to Unix files. I do this with BBedit, but there are other free converters available.
+
+Start by building the chemkin interpreter. A script is used for that, which takes as an argument the name and potentially the path of the fortran compiler you want to use for this.
+
+chmod 755 maki
+./maki <myFortranCompiler>
+
+The result is an executable 'ckintrp3seiser'
+
+Execute ckintrp3seiser
+
+./ckintrp3seiser
+
+The input required during the execution of this program are
+
+ thermo data file name = ?: thermo211.dat
+ input model file name = ?: grimech211.dat
+ interpreter ascii output file name = ?: (any filename, remember it, since you will need this later. We will call it a.i)
+ CHEMKIN link file name = ?: (any filename, we will call it linkfile)
+ 
+Check in the bottom of the file a.i if there where any errors and make appropriate changes.
+
+After this you need to execute two different perl scripts. Start with making these executable
+
+chmod 755 *.perl
+
+Then execute the first script using the chemkin ascii output as
+
+./mechi2tex.perl a.i 1 2
+
+This produces the files a.mech and a.tex. Now continue with the file a.mech and the second perl script. Execute
+
+./modmech.perl -t thermo211.dat -r transport211.dat -o gri.211.mech a.mech
+
+Check the error messages and make appropriate corrections, if the script has problems reading some data. 
+
+This produces a couple of files, two of which you need. The mechanism in FlameMaster format is now in gri.30.mech. This file will be used by ScanMan, which preprocesses the data and generates a binary file, which is the input to the FlameMaster program. The second file is newthermofile, which is a combination of the transport and thermo data. This will have to be preprocessed to be used by ScanMan. The command is
+
+CreateBinFile -i newthermofile -o gri.211.thermo.bin
+
+This creates the binary file gri.211.thermo.bin, which is used as an input file for ScanMan. Move this file to ~/FlameMaster/FlameManData (shell variable $myData), which is where ScanMan looks for it, if you don't specify the path and it is not in the current directory.
+
+mv gri.211.thermo.bin ~/FlameMaster/FlameManData
+
+You can now create a directory GRI211 in ~/FlameMaster/ScanManRun and copy the mechanism file to that directory.
+
+mkdir ~/FlameMaster/ScanManRun/GRI211
+mv gri.211.mech ~/FlameMaster/ScanManRun/GRI211
+cd ~/FlameMaster/ScanManRun/GRI211
+
+You can now run ScanMan for this mechanism.
+
+ScanMan -i gri.211.mech -t gri.211.thermo.bin -S >! gri.211.out
+
+If I run this I get an error that M0 (which is equivalent to just M) does not have to be defined, so I just uncomment its definition in the file gri.211.mech (close to the bottom) and it works. Note that you can just copy the vi command from the error message. Comment with a #.
+
+#let M = 1.0[OTHER].
+
+You also get a couple of warnings about doubly defined reactions. For GRI2.11 this is ok and intended. The warning is useful when compiling mechanisms to avoid unintended repetitions of reactions. The warnings do not matter, but can for convenience be suppressed by matching the reaction labels in the gri.211.mech file in the following way.
+
+Example:
+Change reaction labels from 
+87:     OH + HO2 -> O2 + H2O    { a = 1.450E+13 n = 0.000 E =  -2.092 }
+287:    OH + HO2 -> O2 + H2O    { a = 5.000E+15 n = 0.000 E =  72.509 }
+
+to
+
+87.1:     OH + HO2 -> O2 + H2O    { a = 1.450E+13 n = 0.000 E =  -2.092 }
+87.2:    OH + HO2 -> O2 + H2O    { a = 5.000E+15 n = 0.000 E =  72.509 }
+
+The main result of this is the file gri.211.pre. Move this file to ~/FlameMaster/FlameManData (shell variable $myData), where FlameMaster will looks for it, if you don't specify the path and it is not in the current directory.
+
+mv gri.211.pre $myData
+
+You can now go to the FlameManRun directories and run a case with the GRI2.11 mechanism. Compute as an example a methane steady diffusion flame. Use a good solution as a start profiles file. Converging with an entirely different mechanism is sometimes not so easy.
+
+cd ~/FlameMaster/FlameManRun/Diff/Steady/CH4
+FlameMaster -s OutMethan/CH4_p01_0chi004.5tf0300to0300 -r gri.211.pre
+

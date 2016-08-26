@@ -1,0 +1,164 @@
+Note: The following installation instructions install the FlameMaster program 
+to ~/FlameMaster and are based on the use of csh, tcsh, or bash. If you are
+using a different environment or want to install in a different location
+appropriate changes have to be made in the Install script or after
+installation. These installation instructions are for LINUX and Mac OSX. Instructions
+for windows computers are given below.
+
+0. Pre-install: Before installing the FlameMaster package, the CVODE software needs to be installed.
+For this follow the following steps. Go to
+
+https://computation.llnl.gov/casc/sundials/download/download.html
+
+and download the cvode tar.gz file and unpack it (Alternatively, you can install the entire 
+sundials library, which includes cvode).
+
+Then execute the following commands in the cvode directory. For step 4 you have to know where
+cvode was installed.
+
+./configure
+
+make
+
+make install
+
+NOTE: cvode function calls have changed with version 2.6.0 (sundials version 2.4.0). These versions are 
+the default in FlameMaster. You can use older versions of cvode (or sundials) by defining an appropriate
+environment variable in the file ~/.FlameManExports.csh (or .bash). This is described under step 4.
+
+1.  Rename the FlameMaster archive to ~/FlameMaster  . If you prefer a different location for the
+FlameMaster package, rename the FlameMaster folder appropriately and change the path
+in FlameManExports.csh or FlameManExports.bash (see installation step 2). The description
+below assumes the location to be ~/FlameMaster. If you choose a different location, some
+of the commands have to be changed appropriately.
+
+2.  If you are using csh, tcsh, copy the file
+~/FlameMaster/FlameManExports.csh to ~/.FlameManExports.csh. If you are using
+bash, copy the file ~/FlameMaster/FlameManExports.bash to
+~/.FlameManExports.bash
+
+3.  If you are using csh, tcsh, add the line source
+~/.FlameManExports.csh to the file ~/.cshrc. If you are using bash,
+ add the line source ~/.FlameManExports.bash to the file ~/.bashrc.
+
+4.  Choose the correct settings for flex, cvode, and the computer architecture in the file
+~/.FlameManExports.csh or, if you are using bash, in ~/.FlameManExports.bash.
+If you are using a cvode version older than 2.6.0 (or the sundials package older than version 2.4.0) 
+then set the environment variable FlameManCVODEVERSION to SUNDIALS23. In the csh file this would be
+setenv FlameManCVODEVERSION "SUNDIALS23"
+In the bash file this would be
+export FlameManCVODEVERSION="SUNDIALS23"
+
+5.  Source the file ~/.FlameManExports.csh or ~/.cshrc if you are using csh, or
+source the file ~/.FlameManExports.bash or ~/.bashrc. You can do this, for instance,
+by executing the command
+
+source ~/.FlameManExports.csh
+
+Instead, you can also log out and in again. It is important to do that in the shell you are using. The
+installation script and all other scripts and programs invoked won't recognize
+the variables defined in the .FlameManExports.{whateveryouuse} file otherwise.
+
+6. If flex is not installed on the machine and the second flex option in
+~/.FlameManExports.{whateveryouuse} has been used, install flex now using the
+commands chmod 755 ~/FlameMaster/InstallFlex ~/FlameMaster/InstallFlex
+
+7. Choose the correct machine settings in the file
+~/FlameMaster/FlameManTools/ListTool/FLReader/Makefile 
+
+8.  To install the package, use the script Install.csh or Install.bash depending on the shell
+you are using. Change the file mode of this script to executable by performing, for instance the command
+
+chmod 755 ~/FlameMaster/Install.csh
+
+9. Install package using the command 
+
+~/FlameMaster/Install.csh
+
+or 
+
+~/FlameMaster/Install.bash
+ 
+depending on your shell. Make sure that your
+current shell is newer than installation step 4 or you properly executed step 5.
+
+10. Check out some examples in ~/FlameMaster/FlameManRun. In each directory under
+FlameManRun, look at the Readme files, if present. These have descriptions of how
+to run the code and pre- and post-process the data. Also some additional helpful 
+features are documented in the Readme files. Start with
+~/FlameMaster/FlameManRun/Diff/Steady/H2. Then go
+to ~/FlameMaster/FlameManRun/Diff/Steady/CH4 and look at the Readme file.
+Continue through the other examples.
+Note that if the FlameMaster program is not installed in ~/FlameMaster, you have 
+to change the path to the mechanism files appropriately in the input files.
+
+For the generation of flamelet libraries, look at the file ~/Documentation/FlameletLibraries.pdf
+
+Another good exercise is to convert the GRI2.11 mechanism from chemkin to
+FlameMaster format. This is described in ~/FlameMaster/FlameManTools/CK2FMReinh
+in a Readme file.
+
+11. If you come across any problems during the installation, please send me the
+complete output of running the FlameMaster install script and relevant results
+of just typing the command 'env' and I can try to give you some clues.
+
+
+
+Windows computer
+To install FlameMaster on windows computers, we use a UNIX type system that first needs to be 
+installed on the computer. This system consists of the two packages MinGW and MSYS.  For the 
+compilation of the FlameMaster package, the tools flex and bison are also required, which are 
+not a part of the MSYS package and need to be installed separately. 
+
+To install these packages, follow these steps:
+
+MinGW
+> http://sourceforge.net/project/showfiles.php?group_id=2435&package_id=240780
+> Download the .exe and run it
+> Install in c:\MinGW
+> Select c++ compiler and MinGW make
+
+MSYS
+> http://downloads.sourceforge.net/mingw/MSYS-1.0.10.exe
+> Download the .exe and run it
+> Install in c:\msys\1.0
+> Linking with MinGW: use the directory c:\MinGW
+
+MSYS update required for VISTA
+> http://sourceforge.net/project/showfiles.php?group_id=2435&package_id=24963
+> Download the latest msysCORE tar.gz file.
+> Unpack it and copy everything in c:\msys\1.0
+
+flex
+> Go in the FlameMaster/flex directory
+> ./configure
+> make
+> make install
+
+bison 
+> Go in the FlameMaster/bison directory
+> ./configure
+> make
+> make install
+
+
+Next the CVODE software needs to be installed.
+
+CVODE
+> https://computation.llnl.gov/casc/sundials/download/download.html
+> Download the tar.gz file and unpack it.
+> ./configure
+> make
+> make install
+
+
+Finally, the FlameMaster package can be installed. For this follow these steps. For more details
+on the installation procedure, follow the steps shown above for LINUX and Mac OSX, but with the 
+appropriate files for win32 as listed below. Don't forget the c:/tmp directory.
+
+FlameMaster
+> Create a directory named c:/tmp
+> Source FlameManExport.win32
+> Run Install.win32
+
+

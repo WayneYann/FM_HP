@@ -1,0 +1,4 @@
+#!/bin/csh 
+
+$1 -o ckintrp3seiser ckintrp3seiser.for
+

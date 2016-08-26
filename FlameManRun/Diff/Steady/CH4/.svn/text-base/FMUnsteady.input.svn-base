@@ -1,0 +1,72 @@
+WriteRes is TRUE
+#WriteFullRes is TRUE
+WriteEverySolution is TRUE
+
+ComputeWithRadiation is TRUE
+
+OutputPath is ./OutUnsteady
+
+Scalar DissipationRate = 4.5
+#Scalar DissipationRate = 5
+#Scalar DissipationRate = 7
+#Scalar DissipationRate = 10
+#Scalar DissipationRate = 15
+#Scalar DissipationRate = 20
+#Scalar DissipationRate = 30
+#Scalar DissipationRate = 50
+#Scalar DissipationRate = 70
+#Scalar DissipationRate = 100
+pressure = 40.0e5
+
+TimeDepFlag = TRUE
+#DampFlag = TRUE
+
+UseNumericalJac is TRUE
+DeltaTStart = 1.0e-4
+UseModifiedNewton = TRUE
+LambdaMin = 1.0e-2
+MaxIter = 25
+DeltaNewGrid = 15
+OneSoluOneGrid is TRUE
+initialgridpoints = 20
+maxgridpoints = 139
+q = -0.25
+R = 60
+TolRes = 1.0e-12
+TolDy = 1.0e-4
+left = 0.0
+right = 9.0
+
+#StartProfilesFile is ./CH4_p01a00100tf0300to0300
+StartProfilesFile is ./CH4_p01chi00045tf0300to0300
+
+fuel is CH4
+MechanismFile is CH4.72.pre
+globalReaction is CH4 + 2O2 == CO2 + 2H2O;
+
+oxidizer is o2
+
+#Flame is CounterFlowDiffusion
+Flame is Counterflow Diffusion in Mixture Fraction Space
+
+#GoToFuel N2
+#ContInc = 0.05
+#ContSide is left
+#ContType is Temperature
+#ContBound = 1.0
+
+
+Fuel Side {
+	dirichlet {
+		t = 300.0
+		y->CH4 = 1.0
+	}
+}
+
+Oxidizer Side {
+	dirichlet {
+		t = 300.0
+		x->o2 = 0.21
+		x->n2 = 0.79
+	}
+}

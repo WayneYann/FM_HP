@@ -1,0 +1,65 @@
+K 25
+svn:wc:ra_dav:version-url
+V 35
+/svn/flame_master/!svn/ver/51/trunk
+END
+InstallFlex
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/flame_master/!svn/ver/24/trunk/InstallFlex
+END
+FlameManExports.win32
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/18/trunk/FlameManExports.win32
+END
+Install.win32
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/flame_master/!svn/ver/12/trunk/Install.win32
+END
+Changes
+K 25
+svn:wc:ra_dav:version-url
+V 43
+/svn/flame_master/!svn/ver/23/trunk/Changes
+END
+Readme
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/flame_master/!svn/ver/51/trunk/Readme
+END
+FlameManExports.bash
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/18/trunk/FlameManExports.bash
+END
+FlameManExports.csh
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/18/trunk/FlameManExports.csh
+END
+InstallBison
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/flame_master/!svn/ver/1/trunk/InstallBison
+END
+Install.bash
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/svn/flame_master/!svn/ver/12/trunk/Install.bash
+END
+Install.csh
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/flame_master/!svn/ver/24/trunk/Install.csh
+END

@@ -1,0 +1,359 @@
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/flame_master/!svn/ver/9/trunk/bison-1.25
+END
+vmsgetargs.c
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/vmsgetargs.c
+END
+getopt1.c
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/getopt1.c
+END
+conflicts.c
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/conflicts.c
+END
+allocate.c
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/allocate.c
+END
+INSTALL
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/INSTALL
+END
+COPYING
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/COPYING
+END
+system.h
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/system.h
+END
+texinfo.tex
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/texinfo.tex
+END
+NEWS
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/NEWS
+END
+getargs.c
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/getargs.c
+END
+LR0.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/LR0.c
+END
+mkinstalldirs
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/mkinstalldirs
+END
+derives.c
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/derives.c
+END
+files.c
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/files.c
+END
+configure.in
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/configure.in
+END
+ChangeLog
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/ChangeLog
+END
+files.h
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/files.h
+END
+reduce.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/reduce.c
+END
+closure.c
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/closure.c
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/README
+END
+bison.simple
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.simple
+END
+bison.info-1
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.info-1
+END
+bison.info-2
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.info-2
+END
+bison.info-3
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.info-3
+END
+bison.info
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.info
+END
+bison.info-4
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.info-4
+END
+main.c
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/main.c
+END
+bison.info-5
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.info-5
+END
+state.h
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/state.h
+END
+version.c
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/version.c
+END
+gram.c
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/gram.c
+END
+bison.1
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.1
+END
+lex.c
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/lex.c
+END
+bison.cld
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.cld
+END
+lalr.c
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/lalr.c
+END
+build.com
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/build.com
+END
+alloca.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/alloca.c
+END
+gram.h
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/gram.h
+END
+print.c
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/print.c
+END
+install-sh
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/install-sh
+END
+lex.h
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/lex.h
+END
+new.h
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/new.h
+END
+nullable.c
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/nullable.c
+END
+symtab.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/symtab.c
+END
+configure
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/configure
+END
+REFERENCES
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/REFERENCES
+END
+output.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/output.c
+END
+Makefile.in
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/Makefile.in
+END
+getopt.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/getopt.c
+END
+reader.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/reader.c
+END
+bison.texinfo
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.texinfo
+END
+bison.hairy
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.hairy
+END
+symtab.h
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/symtab.h
+END
+vmshlp.mar
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/vmshlp.mar
+END
+getopt.h
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/getopt.h
+END
+machine.h
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/machine.h
+END
+types.h
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/types.h
+END
+warshall.c
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/warshall.c
+END
+bison.rnh
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/svn/flame_master/!svn/ver/1/trunk/bison-1.25/bison.rnh
+END

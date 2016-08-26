@@ -1,0 +1,82 @@
+This directory has a few examples for methane/air diffusion flames solving the
+flamelet equations. 
+
+Try first the command
+
+FlameMaster
+
+If no input file is specified, the input file FlameMaster.input is used. This input
+file has a series of scalar dissipation rates,
+where the largest one is larger than the extinction limit. Hence, at some point
+the solver does not converge anymore. It then goes back to smaller scalar
+dissipation rate and tries again. This iteration continues to get as close as
+possible to the extinction limit. The solver stops when the change in scalar
+dissipation rate in this iteration becomes less than a certain limit, specified
+in T1DFlame::PostConvergence, which is in the file TFlame.C in the directory
+~/FlameMaster/FlameManSource. The solutions can be found in the output
+directory. Also the non-converged solutions will be saved. For these, the extension
+noC is used. The files dat[0-9].dout are tab-separated-list files with the solution at
+the iteration number ending in the number included in the file name. 
+For example, if the present iteration is number 28, then the dat files contain the
+solutions of iterations 18 to 27, and the file dat5.dout is the solution of iteration
+25. This can be used to check the solution at a given point during the Newton iteration.
+
+A general convention used in the code is that data files, which you want to use
+with a graphics program to create 1D plots end in .dout; text files, which you
+can read, end in .tout
+
+After the solver is done, create a symbolfile including the text
+
+chi_ref 
+Tmax
+
+and run
+
+LT -s symbolfile -r rep.dout OutMethan/CH4_p01*300
+
+This will allow you to plot the S-shaped curve. Other symbols from the flamelet files
+can be included in the symbolfile and will then be included in the output
+
+You could also try to start FlameMaster with a different startprofiles file,
+for instance CH4_p01a00100tf0300to0300, which is the solution for a counterflow
+diffusion flame at a strain rate of 100/s.
+
+
+
+You will find that sometimes it is very hard to achieve convergent solutions.
+To improve convergence, the steady solver of the program comes with a
+quasi-unsteady solver. This can be enabled with
+
+TimeDepFlag = TRUE
+
+in the input file.
+
+It is a good idea to set the initial time step to some reasonable value with
+
+DeltaTStart = 1.0e-4
+
+which is what I use, and set
+
+MaxIter = 25 
+DeltaNewGrid = 15
+
+An example for the quasi-unsteady solver can be run with
+
+FlameMaster -i FMUnsteady.input
+
+This example computes a methane flame at 40 bar starting from a 1 bar solution,
+which is a case that would never converge without the quasi-unsteady solver.
+You will see that at first, the time step is strongly reduced until a the time
+step can be converged. After a couple of time steps, the time step increases,
+and when it hits a certain large value, the time dependence is switched off and
+the steady state problem is solved.
+
+
+To use the arclength continuation method uncomment the line
+
+ArclengthCont = TRUE
+
+in the file FlameMaster.input and run the program. This will then compute towards higher 
+scalar dissipation rates and even around the turning point at the extinction limit. More
+information about this is given in the file FlameletLibraries.pdf in the 
+FlameMaster/Documentation directory

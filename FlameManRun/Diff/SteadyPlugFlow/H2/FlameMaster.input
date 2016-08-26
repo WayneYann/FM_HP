@@ -1,0 +1,98 @@
+############
+# Numerics #
+############
+
+#### Newton solver ####
+
+#TimeDepFlag = TRUE
+DeltaTStart = 1.0e-2
+DeltaTMax = 1.0e5
+
+DampFlag = TRUE
+LambdaMin = 1.0e-2
+
+UseNumericalJac is TRUE
+UseSecOrdJac is TRUE
+UseModifiedNewton = TRUE
+
+MaxIter = 100
+TolRes = 1.0e-20
+TolDy = 1e-8
+
+#### grid ####
+
+initialgridpoints = 253
+maxgridpoints = 255
+DeltaNewGrid = 25
+OneSoluOneGrid is TRUE
+
+left = 0.0e-0
+right = 1.2000e-02
+
+q = -0.25
+R = 60
+
+#######
+# I/O #
+#######
+
+WriteFullRes is FALSE
+WriteRes is FALSE
+WriteEverySolution is FALSE
+PrintMolarFractions is TRUE
+
+OutputPath is ./Output_H216
+StartProfilesFile is ./Output_H216/H2_p01a00504tf0298to0298
+
+#############
+# Chemistry #
+#############
+
+#MechanismFile is ~/Research/Chemistry/BPP_SubMechanisms/HYDROGEN/HYDROGEN.fmmech.pre
+MechanismFile is ~/Research/Chemistry/SanDiego/SDMech.pre
+globalReaction is 2H2 + O2 == 2H2O;
+
+fuel is H2
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+Flame is EigenValueDiffusion on physical coordinate
+FlameIsAxisymmetric = TRUE
+
+ThermoDiffusion is TRUE
+ComputeWithRadiation is TRUE
+
+pressure = 1.0e5
+ConstantLewisNumber is FALSE
+
+#######################
+# Boundary conditions #
+#######################
+
+#16: 1.09966909736
+#18:
+#20:
+
+Fuel Side {
+	dirichlet {
+		t = 298.0
+		V = 1.65
+		#epsilon->H2 = 1.0
+		epsilon->H2 = 0.013519
+		epsilon->N2 = 0.986481
+	}
+}
+
+Oxidizer Side {
+	dirichlet {
+		t = 298.0
+		V = -1.81445401065
+		epsilon->N2 = 0.7680
+		epsilon->O2 = 0.2320
+	}
+}
+
+

@@ -1,0 +1,134 @@
+############
+# Numerics #
+############
+
+#### Newton solver ####
+
+#TimeDepFlag = TRUE
+DeltaTStart = 1.0e-4
+DeltaTMax = 1.0e5
+
+DampFlag = TRUE
+LambdaMin = 5.0e-3
+
+UseNumericalJac is TRUE
+UseModifiedNewton = TRUE
+
+MaxIter = 100
+TolRes = 1.0e-14
+TolDy = 1e-06
+
+#### grid ####
+
+initialgridpoints = 21
+maxgridpoints = 201
+DeltaNewGrid = 25
+OneSoluOneGrid is TRUE
+
+left = 0.0
+right = 1.6000e-02
+
+q = -0.25
+R = 60
+
+#GridCorrStart = 0.021
+#GridCorrEnd = 0.022
+#GridCorrAlpha = 0.15
+#GridCorrStart = 0.0075
+#GridCorrEnd = 0.008
+#GridCorrAlpha = 0.35
+
+########################
+# Sensitivity Analysis #
+########################
+
+#SensObj is A1-C6H6
+#SensObj is T
+#ReactionFluxAnal is TRUE
+
+########
+# Soot #
+########
+
+#WithSoot is TRUE
+NSootMoments = 2
+PAHOHOxidation = TRUE
+
+Nucleation = TRUE
+#SizeDepDiffusion = FALSE
+SurfDepCoag = FALSE
+Condensation = FALSE
+#CondSmallPAH = FALSE
+Coagulation = FALSE
+SurfaceGrowth = FALSE
+SurfaceOxidation = FALSE
+ThermoPhoresis = TRUE
+CoagFact = 0.001
+
+#######
+# I/O #
+#######
+
+WriteFullRes is TRUE
+WriteRes is TRUE
+WriteEverySolution = TRUE
+PrintMolarFractions is TRUE
+
+OutputPath is ./Output
+StartProfilesFile is ./C2H2_p01a00019tf0300to0400
+
+#############
+# Chemistry #
+#############
+
+MechanismFile is CH4.72.pre
+globalReaction is 2C2H2 + 5O2 == 4CO2 + 2H2O;
+
+fuel is C2H2
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+Flame is EigenValueDiffusion on physical coordinate
+FlameIsAxisymmetric = TRUE
+
+#ThermoDiffusion = TRUE
+ComputeWithRadiation is TRUE
+
+pressure = 1.0e5
+#ConstantLewisNumber is TRUE
+
+#######################
+# Boundary conditions #
+#######################
+
+#ContSteps = 100
+#ContinFlag = TRUE
+#ToSpecies C3H6O
+#FromSpecies N2
+#ContInc = 0.002
+#ContSide is left
+#ContType is velocity
+#ContBound = 0.0162
+
+Fuel Side {
+	dirichlet {
+		t = 300.0
+		V = 0.04821
+		epsilon->C2H2 = 0.4949
+		epsilon->N2 = 0.5051
+	}
+}
+
+Oxidizer Side {
+	dirichlet {
+		t = 400.0
+		V = -0.08745
+		epsilon->N2 = 0.8092
+		epsilon->O2 = 0.15935
+		epsilon->C2H2 = 0.03145
+	}
+}
+

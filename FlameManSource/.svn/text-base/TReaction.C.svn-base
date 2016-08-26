@@ -1,0 +1,2017 @@
+#include "BroadeningFactors.h"
+#include "FlameMaster.h"
+
+// optimize
+#define NEWREACTIONRATE
+#define NEWRATECOEFFS
+#undef OPTREACTIONRATE // undefine by GB
+
+// use TROE form of pressure dependent reactions, if undefined use expression from Peters, Rogg book
+#define TROE
+
+
+void TReaction::InitTReaction( TInputDataPtr input )
+{
+   	int			i;
+	CounterPtr	counter = input->GetCounter();
+	int 		nOfReactions = counter->reactions;
+	int			nOfSpecies = counter->species;
+	int			nOfThirdBodies = counter->thirdBodies;
+	ReactionPtr	reaction = input->GetReactions();	
+
+	// Exact Backward Reaction Constants
+	fExactBackward = input->fExactBackward;
+	
+	fNSpecies = counter->species;
+	fNSpeciesInSystem = fNSpecies - counter->steadyStates;
+	
+	fA = NewVector( nOfReactions );
+	fN = NewVector( nOfReactions );
+	fEOverRgas = NewVector( nOfReactions );
+
+	fAInf = NewVector( nOfReactions );
+	fNInf = NewVector( nOfReactions );
+	fEInfOverRgas = NewVector( nOfReactions );
+	fLindemannNumber = NewIntVector( nOfReactions );
+	
+	fFcCoeff = NewMatrix( kFcLen, nOfReactions, kColumnPointers );
+
+	fSpeciesNumber = new IntVectorPtr[nOfReactions];
+   	if ( !fSpeciesNumber ) FatalError( "memory allocation of TReaction failed" );
+	fNu = new VectorPtr[nOfReactions];
+   	if ( !fNu ) FatalError( "memory allocation of Counter failed" );
+	for ( i = 0; i < nOfReactions; ++i ) {
+		fSpeciesNumber[i] = NewIntVector( reaction[i].numberOfSpecies );
+	   	fNu[i] = NewVector( reaction[i].numberOfSpecies );
+	}
+
+	fSumEducts = NewVector( nOfReactions );
+	fNEducts = NewIntVector( nOfReactions );
+
+	fPartialEquilibrium = new Flag[nOfReactions];
+   	if ( !fPartialEquilibrium ) FatalError( "memory allocation of TReaction failed" );
+	fWithThirdBody = new Flag[nOfReactions];
+   	if ( !fWithThirdBody ) FatalError( "memory allocation of TReaction failed" );
+	fThirdBodyNumber = NewIntVector( nOfReactions );
+
+	if ( nOfThirdBodies ) {
+		fThirdBodyName = new String[ nOfThirdBodies ];
+	   	fTBSpeciesCoeffs = (nOfThirdBodies>0)?NewMatrix( nOfSpecies, nOfThirdBodies
+							 , kColumnPointers ):NULL; // last element is fTBSpeciesCoeffs[nOfThirdBodies][nOfSpecies]
+		fTBSpeciesNumber = new IntVectorPtr[nOfThirdBodies];
+  	 	if ( !fTBSpeciesNumber ) FatalError( "memory allocation of TReaction failed" );
+		for ( i = 0; i < nOfThirdBodies; ++i ) {
+		   	fTBSpeciesNumber[i] = NewIntVector( nOfSpecies );
+		}
+	}
+	else {
+		fThirdBodyName = NULL;
+		fTBSpeciesCoeffs = NULL;
+		fTBSpeciesNumber = NULL;
+	}
+	fLabels = new String[nOfReactions];
+	if ( !fLabels ) FatalError( "memory allocation of TReaction failed" );
+   
+	fBackwardReac = NewIntVector( nOfReactions );
+	fForwardReac = NewIntVector( nOfReactions );
+
+	fMolarConcs = NewVector( counter->species );
+	
+	fSteadyStatesNumerical = input->fSteadyStatesNumerical;
+	
+	fGlobalMechanism = input->GetHeader()->globalMechanism;
+
+	if ( counter->steadyStates - counter->pahSpecies - counter->sootSpecies 
+				|| fGlobalMechanism ) {
+		fReducedMech = TRUE;
+	}
+	else {
+		fReducedMech = FALSE;
+	}
+
+	if ( fSteadyStatesNumerical ){  
+		fSsInfo = new SteadyStateInfo;
+	
+		if ( fReducedMech ) {
+			fConcBoxVec = new Vector;
+			fConcBoxVec->len = fConcBoxVec->phys_len = fNSpecies - fNSpeciesInSystem;
+			fConcBoxVec->vec = &fMolarConcs->vec[fNSpeciesInSystem];
+		
+			fNewtonInfo = NewNewtonInfo( fConcBoxVec->len, fConcBoxVec );
+			fNewtonInfo->modified = FALSE;
+			fNewtonInfo->maxSteps = 100;
+			SetNewtonFuncs( fNewtonInfo, SteadyStatesFunc, NULL, NULL );
+		}
+		else {
+			fConcBoxVec = NULL;
+			fNewtonInfo = NULL;
+		}
+	}
+	else {
+		fSsInfo = NULL;
+		fConcBoxVec = NULL;
+		fNewtonInfo = NULL;
+	}
+
+	FillReactions( input );
+	
+	if ( fReducedMech ) {
+		cerr << "check steady states" << NEWL;
+		CheckSteadyStatesMech( input->fReactionFile );
+		cerr << "total number of species           : " << fNSpecies << NEWL;
+		cerr << "number of steady state species    : " << fNSpecies-fNSpeciesInSystem << NEWL;
+		cerr << "number of non steady state species: " << fNSpeciesInSystem << NEWL;
+	}
+	CheckBroadeningFactors( input->fReactionFile );
+}
+
+TReaction::~TReaction( void )
+{
+   	int i;
+	int nOfReactions = GetNOfReactions();
+	int nOfThirdBodies = GetNOfThirdBodies();
+	
+	for ( i = 0; i < nOfThirdBodies; ++i ) {
+		delete fThirdBodyName[i];
+	}
+
+	FreeNewtonInfo( fNewtonInfo );
+	delete fConcBoxVec;
+	delete fSsInfo;
+	DisposeVector( fMolarConcs );
+	
+	DisposeIntVector( fForwardReac );
+	DisposeIntVector( fBackwardReac );
+	for ( i = 0; i < nOfReactions; ++i ) {
+		delete fLabels[i];
+	}
+	delete fLabels;
+	if ( fTBSpeciesCoeffs ) {
+		DisposeMatrix ( fTBSpeciesCoeffs );
+		delete fThirdBodyName;
+	}
+	for ( i = 0; i < nOfThirdBodies; ++i ) {
+		DisposeIntVector ( fTBSpeciesNumber[i] );
+	}
+	DisposeIntVector ( fThirdBodyNumber );
+	delete fWithThirdBody;
+	delete fPartialEquilibrium;
+	DisposeIntVector( fNEducts );
+	DisposeVector( fSumEducts );
+	for ( i = 0; i < nOfReactions; ++i ) {
+		DisposeVector ( fNu[i] );
+		DisposeIntVector ( fSpeciesNumber[i] );
+	}
+	delete fNu;
+	delete fSpeciesNumber;
+	DisposeIntVector ( fLindemannNumber );
+	DisposeVector ( fEInfOverRgas );
+	DisposeVector ( fNInf );
+	DisposeVector ( fAInf );
+	DisposeVector ( fEOverRgas );
+	DisposeVector ( fN );
+	DisposeVector ( fA );
+}
+
+void TReaction::FillReactions( TInputDataPtr input )
+{
+	int				i, j;
+	HeaderPtr		header = input->GetHeader();
+	ReactionPtr		reaction = input->GetReactions();
+	ThirdBodyPtr	thirdBody = input->GetThirdBody();
+	DimensionPtr	dimension = input->GetDimension();
+	int 			numberOfDimensions = input->GetCounter()->dimensions;
+	int				nOfSpecies = input->GetCounter()->species;
+	int				nOfThirdBodies = input->GetCounter()->thirdBodies;
+	Double 			unitsConverterA = 0.0;
+	Double 			unitsConverterE = 0.0;
+	Double			reacOrderConv = 0.0;
+	Double			tempExpConv = 0.0;
+	int				orderOfReaction;
+	const Double	moleToKmole = 1000.0;
+	
+	// set units converter
+	// it is assumed that only A is a function of the order of reaction 
+	// and the temperature exponent
+	for ( i = 0; i < numberOfDimensions; ++i ) {
+		if ( dimension[i].name[0] == 'A' ) {
+			if ( unitsConverterA ) {
+				cerr << "#error: units converter for 'A' doubly defined or zero" << endl;
+				exit( 2 );
+			}
+			else {
+				unitsConverterA = dimension[i].value;
+				if ( dimension[i].orderOfReaction ) {
+					reacOrderConv = dimension[i].orderOfReacValue;
+				}
+				if ( dimension[i].tempExponent ) {
+					tempExpConv = dimension[i].tempExpValue;
+				}
+			}
+		}
+		else if ( dimension[i].name[0] == 'E' ) {
+			if ( unitsConverterE ) {
+				cerr << "#error: units converter for 'E' doubly defined or zero" << endl;
+				exit( 2 );
+			}
+			else {
+				unitsConverterE = dimension[i].value;
+			}
+		}
+		else {
+			cerr << "# warning: i don't need units for " << dimension->name << endl;
+		}
+	}
+	
+	// set values for A, N, E, including the conversion to SI-units
+	for ( i = 0; i < GetNOfReactions(); ++i ) {
+		// first get label
+		fLabels[i] = new char[strlen( reaction[i].label )+1];
+		if ( !fLabels[i] ) FatalError( "memory allocation of TReaction failed" );
+		strcpy( fLabels[i], reaction[i].label );
+		
+/*	   	// then determine order of reaction
+		orderOfReaction = ( reaction[i].withThirdBody ) ? 1: 0;
+	   	for ( j = 0; j < reaction[i].numberOfSpecies; ++j ) {
+			if ( reaction[i].speciesCoeff[j] > 0.0 ) {
+			   	orderOfReaction += ( int )reaction[i].speciesCoeff[j];
+			}
+		}
+		if ( orderOfReaction > 3 && !reaction[i].partialEquilibrium 
+					&& !header->globalMechanism ) {
+			cerr << "#warning: order of reaction no. " << i << " is " << orderOfReaction << NEWL;
+		}
+		
+		if ( orderOfReaction != reaction[i].orderOfReaction ) {
+			fprintf( stderr, "#warning: order of %dth reaction changed by user from %d to %d\n"
+							, i+1, orderOfReaction, reaction[i].orderOfReaction );
+		}*/
+		orderOfReaction = reaction[i].orderOfReaction;
+
+		// then fill arrays
+		// first convert A and E to SI-units, then change mole to kmole
+	   	fA->vec[i] = unitsConverterA * myPow( reacOrderConv, orderOfReaction ) 
+						* myPow( tempExpConv, reaction[i].n ) * reaction[i].a 
+						* myPow( moleToKmole, ( orderOfReaction-1 ) );
+		fN->vec[i] = reaction[i].n;
+		fEOverRgas->vec[i] = unitsConverterE * reaction[i].e / RGAS * 1000.0;
+		if ( reaction[i].withLindemann ) {
+// no need to correct A_0 of lindemann reaction, since orderOfReaction accounts
+// already for third body ( ver. 1.4.3 )
+//			fA->vec[i] *= reacOrderConv * moleToKmole;
+			fAInf->vec[i] = unitsConverterA * myPow( reacOrderConv, orderOfReaction-1 ) 
+			    			* myPow( tempExpConv, reaction[i].nInf ) * reaction[i].aInf
+							* myPow( moleToKmole, ( orderOfReaction-2 ) );
+/*			Double	wrong = unitsConverterA * myPow( reacOrderConv, orderOfReaction ) 
+			    			* myPow( tempExpConv, reaction[i].nInf ) * reaction[i].aInf
+							* myPow( moleToKmole, ( orderOfReaction ) );
+			if ( fAInf->vec[i] != wrong ) {
+				fprintf( stderr, "%s: ai = %10g\twrong = %10g\n", fLabels[i], fAInf->vec[i], wrong );
+			}
+*/			fNInf->vec[i] = reaction[i].nInf;
+			fEInfOverRgas->vec[i] = unitsConverterE * reaction[i].eInf / RGAS * 1000.0;
+			fLindemannNumber->vec[i] = reaction[i].lindemannNumber;
+		}
+		
+		Double	*fcCoeff = fFcCoeff->mat[i];
+		fcCoeff[kFca] = reaction[i].fca;
+		fcCoeff[kFcb] = reaction[i].fcb;
+		fcCoeff[kFcc] = reaction[i].fcc;
+		fcCoeff[kFcTa] = reaction[i].fcTa;
+		fcCoeff[kFcTb] = reaction[i].fcTb;
+		fcCoeff[kFcTc] = reaction[i].fcTc;
+
+		fPartialEquilibrium[i] = reaction[i].partialEquilibrium;
+		if ( fWithThirdBody[i] = reaction[i].withThirdBody ) {
+			fThirdBodyNumber->vec[i] = reaction[i].thirdBodyNumber;
+		}
+		
+		int	speciesCounter = 0;
+		fNEducts->vec[i] = 0;
+		fSumEducts->vec[i] = ( fWithThirdBody[i] && !IsWithLindemann( i ) ) ? 1 : 0;
+		for ( j = 0; j < fNu[i]->len; ++ j ) {
+			if ( reaction[i].speciesCoeff[j] > 0.0 ) {
+				++fNEducts->vec[i];
+				fSumEducts->vec[i] += reaction[i].speciesCoeff[j];
+				fSpeciesNumber[i]->vec[speciesCounter] = reaction[i].speciesNumber[j];
+		 	  	fNu[i]->vec[speciesCounter] = reaction[i].speciesCoeff[j];
+				++speciesCounter;
+			}
+		}
+		for ( j = 0; j < fNu[i]->len; ++ j ) {
+			if ( reaction[i].speciesCoeff[j] < 0.0 ) {
+				fSpeciesNumber[i]->vec[speciesCounter] = reaction[i].speciesNumber[j];
+		 	  	fNu[i]->vec[speciesCounter] = reaction[i].speciesCoeff[j];
+				++speciesCounter;
+			}
+		}
+	}
+	
+	for ( i = 0; i < nOfThirdBodies; ++ i ) {
+		fThirdBodyName[i] = new char[strlen( thirdBody[i].name )+1];
+		strcpy( fThirdBodyName[i], thirdBody[i].name );
+		for ( j = 0; j < thirdBody[i].speciesNumber->len; ++ j ) {
+		   	fTBSpeciesNumber[i]->vec[j] = thirdBody[i].speciesNumber->vec[j];
+			fTBSpeciesCoeffs->mat[i][j] = thirdBody[i].speciesCoeff->vec[j];
+		}
+	}
+	
+	int	*backReac = fBackwardReac->vec;
+	int	*forReac = fForwardReac->vec;
+	for ( i = 0; i < GetNOfReactions(); ++i ) {
+		backReac[i] = GetBackwardReaction( i );
+		forReac[i] = GetForwardReaction( i );
+	}
+	
+}
+
+int TReaction::GetReverseReaction( int i, char is, char lookfor )
+{
+	int		len = strlen( fLabels[i] );
+	char	revLabel[128];
+	strcpy( revLabel, fLabels[i] );
+	
+	if ( revLabel[len-1] == is ) {
+		revLabel[len-1] = lookfor;
+	}
+	else {
+		return -1;
+	}
+	
+	return FindReaction( revLabel );
+}
+
+int TReaction::FindReaction( char *label )
+{
+	for ( int i = 0; i < GetNOfReactions(); ++i ) {
+		if ( strcmp( label, fLabels[i] ) == 0 ) {
+			return i;
+		}
+	}
+	
+	return -1;
+}
+
+void TReaction::ComputeBackwardRateCoefficients( Double *k, Double temp, TSpeciesPtr fSpecies)
+{
+  if ( fExactBackward ){
+
+    Double p0  = 1.0133e5;
+    Double lnROverP0 = log ( RGAS/p0 );
+    Double RT  = RGAS * temp;
+    Double lnT = log( temp );
+    
+    // Loop over the reactions
+    for ( int i = 0; i < GetNOfReactions(); ++i ) {
+      
+      // If rate coefficient is negative then compute the "REAL" backward coefficient
+      // based on the equilibrium constatnt: kb = Kc / kf
+      if ( IsBackwardReaction(i) ){
+	
+	//printf("%s -> %e\n", fLabels[i], k[i]); 
+	//printf("\t%e\t%f\t%f\n", fA->vec[i], fN->vec[i], fEOverRgas->vec[i]);
+	
+	// Get coeff nu and species index for all species in the reaction
+	Double *nu = fNu[i]->vec;
+	int    *speciesNumber = fSpeciesNumber[i]->vec;
+	int    nSpecies = fNu[i]->len;
+	
+	Double sumNu   = 0.0;
+	Double sumNuMu = 0.0;
+	
+	// Loop over the species in the reaction
+	for ( int j =0; j<nSpecies; j++){
+	  
+	  int index = speciesNumber[j];
+	  
+	  //printf("%d\t%d\t%s\t%f\n", j, index, fSpecies->GetNames()[index], nu[j]); 
+	  
+	  // Compute the free enthalpy: mu
+	  Double mu = 0.0;
+	  Double *a = ( temp > 1000.0 ) ? fSpecies->GetCoeffHigh()->mat[index] : fSpecies->GetCoeffLow()->mat[index];
+	  mu = a[0] * ( 1.0 - lnT ) + a[5] / temp - a[6];
+	  mu -= 0.5 * temp * ( a[1] + temp * ( a[2] / 3.0 + temp * ( a[3] / 6.0 + 0.1 * temp * a[4] ) ) );
+	  mu *= RT;
+	  
+	  sumNu   += nu[j];
+	  sumNuMu += nu[j] * mu;
+	}
+	Double lnKC = -sumNu * ( lnT + lnROverP0 ) - sumNuMu / RT;
+	
+	// Modify the backward coefficient
+	k[i] = k[i] / exp( lnKC );
+	//printf("\t%e\t%f\n", k[i], temp);
+      }
+    }
+  }
+}
+
+void TReaction::ComputeRateCoefficients( Double *k, Double *fCurrRateCoefficients, Flag &kNewerThanW,
+					 Double temp, Double &currTemp, Double pressure, Double &currPressure, Double *tBConc, TSpeciesPtr species )
+{
+	int	i;
+
+#ifdef NEWRATECOEFFS
+	if ( temp == currTemp && pressure == currPressure ) {
+		copy( GetNOfReactions(), fCurrRateCoefficients, 1, k, 1 ); // arrayman function, copies fCurrRateCoefficients to k
+		for ( i = 0; i < GetNOfReactions(); ++i ) {
+			if ( IsWithLindemann( i ) ) {
+//				ComputeRateCoefficient( i, k[i], temp, pressure );
+			}
+		}
+	}
+	else {
+		currTemp = temp;
+		currPressure = pressure;
+		kNewerThanW = TRUE;
+		for ( i = 0; i < GetNOfReactions(); ++i ) {
+			ComputeRateCoefficient( i, k[i], temp, pressure, tBConc );
+		}
+		copy( GetNOfReactions(), k, 1, fCurrRateCoefficients, 1 ); // arrayman function, copies k to fCurrRateCoefficients
+
+	}
+#else
+	for ( i = 0; i < GetNOfReactions(); ++i ) {
+		ComputeRateCoefficient( i, k[i], temp, pressure, tBConc );
+	}
+#endif
+
+	if ( fExactBackward ){
+	  // compute the backard coefficient
+	  ComputeBackwardRateCoefficients( k, temp, species );
+	  // 
+	}
+}
+
+void TReaction::ComputeRateCoefficient( int index /* number*/, Double &k, Double temp, Double pressure, Double *tBConc )
+{
+	Double	*a = fA->vec;
+	Double	*n = fN->vec;
+	Double	*eOverR = fEOverRgas->vec;
+	Double	*ai = fAInf->vec;
+	
+	//
+	int number = index;
+	if ( fExactBackward ){
+	  if ( IsBackwardReaction(index) )
+	    number = GetForwardReaction(index);
+	}
+	//
+
+	ComputeRateCoefficient( temp, k, a[number], n[number], eOverR[number] );
+	if ( ai[number] ) {
+
+		Double	*ni = fNInf->vec;
+		Double	*eiOverR = fEInfOverRgas->vec;
+		Double	*fcCoeff = fFcCoeff->mat[number];
+		int		*lindemannNumber = fLindemannNumber->vec;
+		Double	kNull;
+		Double	fc = 0.0;
+		Double	N;
+		Double	f;
+		Double	conc;
+		
+		kNull = k;							// store value of k_{0}
+		ComputeRateCoefficient( temp, k, ai[number], ni[number], eiOverR[number] );	// compute kInf;
+		if ( fWithThirdBody[number] ) {
+			conc = tBConc[fThirdBodyNumber->vec[number]];
+		}
+		else {
+			conc = pressure / ( RGAS * temp );
+		}
+		if ( fcCoeff[kFca] || fcCoeff[kFcb] || fcCoeff[kFcc] ) {
+			if ( fcCoeff[kFca] ) {
+				fc += fcCoeff[kFca] * exp( -temp / fcCoeff[kFcTa] );
+			}
+			if ( fcCoeff[kFcb] ) {
+				fc += fcCoeff[kFcb] * exp( -temp / fcCoeff[kFcTb] );
+			}
+			if ( fcCoeff[kFcc] ) {
+				fc += fcCoeff[kFcc] * exp( -fcCoeff[kFcTc] / temp );
+			}
+/*			if ( fabs( ( fc - gBroadening[lindemannNumber[number]]( temp ) ) / fc ) > 1e-5 ) {
+				fprintf( stderr, "%s at %g K: fcCoeff = %g\tfcFunc = %g\n", fLabels[number], temp
+						, fc, gBroadening[lindemannNumber[number]]( temp ) );
+				fprintf( stderr, "a\t%g\t%g\n", fcCoeff[kFca], fcCoeff[kFcTa] );
+				fprintf( stderr, "b\t%g\t%g\n", fcCoeff[kFcb], fcCoeff[kFcTb] );
+				fprintf( stderr, "c\t%g\t%g\n", fcCoeff[kFcc], fcCoeff[kFcTc] );
+			}*/
+		}
+		else {
+//			fprintf( stderr, "now '%s'\n", fLabels[number] );
+//			exit( 2 );
+			fc = gBroadening[lindemannNumber[number]]( temp );
+		}
+#ifdef TROE
+		N = 0.75 - 1.27 * myLog10( fc );
+		Double	cCoeff = - 0.4 - 0.67 * myLog10( fc );
+		Double	dCoeff = 0.14;
+		kNull *= conc / MAX(k, 1.0e-60);
+		Double	log10kNull = myLog10( kNull );
+		f = ( log10kNull + cCoeff ) / ( N - dCoeff * ( log10kNull + cCoeff ) );
+		f = pow( fc, 1.0 / ( f * f + 1.0 ) );
+		k *= f * kNull / ( 1.0 + kNull );
+#else
+		N = 0.75 - 1.27 * myLog10( fc );
+		kNull *= conc / MAX(k, 1.0e-60);
+//		kl = kNull / ( 1.0 + kNull );
+		f = myLog10( kNull ) / N;
+		f = pow( fc, 1.0 / ( f * f + 1.0 ) );
+		k *= f * kNull / ( 1.0 + kNull );
+#endif
+	}
+}
+
+#define pow(a, b) exp((b)*log(a))
+
+void TReaction::ComputeRateCoefficient( Double temp, Double &k, Double a, Double n, Double eOverR )
+{
+	if ( n ) {
+		if ( fabs( eOverR ) > 1.0e-3 ) {
+//			changed from hp at 7. February, 1995
+//			k = a * pow( temp, n ) * exp( -eOverR / temp );
+			k = a * exp( n * log( temp ) - eOverR / temp );
+		}
+		else {
+			k = a * pow( temp, n );
+		}
+	}
+	else {
+		if ( fabs( eOverR ) > 1.0e-3 ) {
+			k = a * exp( -eOverR / temp );
+		}
+		else {
+			k = a;
+		}
+	}
+}
+#undef pow
+Double TReaction::ComputedkdT( int reactionIndex, Double temp, Double pressure, Double rateCoeff, Double *tBConc )
+{
+	Double	dkdT;
+	Double	t2 = 1.00001 * temp;
+	
+	ComputeRateCoefficient( reactionIndex, dkdT, t2, pressure, tBConc );
+	dkdT -= rateCoeff;
+
+	return ( dkdT / ( t2 - temp ) );
+}
+
+void TReaction::ComputeReactionRates( Double *w, Flag &kNewerThanW, Double *currReacRate, Double *k
+						, Double *tBConc, Double density, Double *Y
+				      , Double *currConc, Double *molarMass, TSpeciesPtr species)
+{
+	Double			*c = fMolarConcs->vec;
+#ifdef NEWREACTIONRATE
+	int				nSpeciesIn = species->GetNSpeciesInSystem();
+	int				nSpecies = species->GetNOfSpecies();
+	int				*nUsedReactions = species->GetNOfUsedReactions()->vec;
+	IntVectorPtr	*usedReaction = species->GetUsedReactions();
+	int				i;
+	int				diffs = 0;
+	int				which = -1;
+	
+	if ( fReducedMech ) {
+		ComputeConcs( c, Y, molarMass, density );
+		ComputeSteadyStates( c, Y, k, molarMass, tBConc, density );
+		if ( fGlobalMechanism ) {
+			ComputeGlobalReactionRates( w, k, GetNOfReactions() );
+			return;
+		}
+	}
+	for ( i = 0; i < nSpecies; ++i ) {
+		if ( Y[i] != currConc[i] ) {
+			which = i;
+			++diffs;
+		}
+		if ( diffs > 1 ) {
+			break;
+		}
+	}
+
+#ifdef OPTREACTIONRATE
+	if ( kNewerThanW || diffs > 1 ) {	//	complete computation of w
+#endif
+		if ( !fReducedMech ) {
+			ComputeConcs( c, Y, molarMass, density );
+		}
+		for ( i = 0; i < GetNOfReactions(); ++i ) {
+			ComputeReactionRate( i, w[i], k[i], c, tBConc );
+		}
+		kNewerThanW = FALSE;
+		copy( nSpecies, Y, 1, currConc, 1 ); // arrayman function, copies Y to currConc
+		copy( GetNOfReactions(), w, 1, currReacRate, 1 ); // arrayman function, copies w to currReacRate
+
+#ifdef OPTREACTIONRATE
+	}else if ( which >= 0 ) {	//	just update
+
+		int	j;
+		copy( GetNOfReactions(), currReacRate, 1, w, 1 ); // arrayman function, copies currReacRate to w
+
+		//GB
+		if ( which < nSpeciesIn){  //compute the old mix molar mass
+		  Double mixMolarMass= 0.0;
+		  for ( int ii = 0; ii < nSpeciesIn; ++ii ) {
+		    mixMolarMass += currConc[ii] / molarMass[ii];
+		  }
+		  mixMolarMass = 1.0 / mixMolarMass;
+		  UpdateReactionRates(w, Y, currConc, molarMass, mixMolarMass, which);
+		}//GB
+
+		for ( j = 0; j < nUsedReactions[which]; ++j ) {
+			i = usedReaction[which]->vec[j];
+			ComputeReactionRate( i, w[i], k[i], tBConc, density, Y, molarMass );
+		}
+		for ( i = 0; i < GetNOfReactions(); ++i ) { // all reactions with third bodies
+			if ( fWithThirdBody[i] ) {
+				ComputeReactionRate( i, w[i], k[i], tBConc, density, Y, molarMass );
+			}
+		}
+	}
+#endif
+
+#else
+	ComputeConcs( c, Y, molarMass, density );
+	if ( fReducedMech ) {
+//		fprintf( stderr, "compute steadystates now\n" );
+		ComputeSteadyStates( c, Y, k, molarMass, tBConc, density );
+		if ( fGlobalMechanism ) {
+			ComputeGlobalReactionRates( w, k, GetNOfReactions() );
+			return;
+		}
+	}
+	for ( int i = 0; i < GetNOfReactions(); ++i ) {
+		ComputeReactionRate( i, w[i], k[i], c, tBConc );
+	}
+#endif
+}
+
+//PP detailed Heat release computation used for Reduction purposes
+Double TReaction::CompDetailedHeatRelease( int number, Double reacRate, Double *enthalpy, Double *W)
+{
+  int           i;
+  int           *speciesNumber = fSpeciesNumber[number]->vec;
+  Double        *nu = fNu[number]->vec;
+  Double        heatRelease = 0;
+
+  for ( i = 0; i<GetNOfSpeciesPerReaction( number ); ++i){
+    heatRelease += -nu[i] * reacRate * enthalpy[speciesNumber[i]] * W[speciesNumber[i]];
+  }
+  return heatRelease;
+}
+//PP
+
+void TReaction::ComputeGlobalReactionRates( Double *w, Double *k, int nOfReactions )
+{
+	copy( nOfReactions, k, 1, w, 1);
+}
+
+void TReaction::ComputeConcs( Double *c, Double *Y, Double *molarMass, Double rho )
+{
+	for ( int i = 0; i < fNSpecies; ++i ) {
+		c[i] = rho * Y[i] / molarMass[i];
+	}
+}
+
+void TReaction::ComputeSteadyStates( Double *c, Double *Y, Double *k, Double *molarMass
+							, Double *tBConc, Double density )
+{
+	int	i;
+	if ( fSteadyStatesNumerical ) {  
+		::ComputeSteadyStates( k, c, tBConc );
+		for ( i = fNSpeciesInSystem; i < fNSpecies; ++i ) {
+			if ( fabs(c[i]) > 1.0 || fabs(c[i]) < 1.0e-10 ) {
+				c[i] = 1.0e-10;
+			}
+		}
+		::ComputeSteadyStates( k, c, tBConc );
+		for ( i = fNSpeciesInSystem; i < fNSpecies; ++i ) {
+			if ( fabs(c[i]) > 1.0 || fabs(c[i]) < 1.0e-10 ) {
+				c[i] = 1.0e-10;
+			}
+		}
+	/*	for ( i = fNSpeciesInSystem; i < fNSpecies; ++i ) {
+			c[i] = 1.0e-10;
+		}*/
+		fSsInfo->SetSteadyStateInfo( c, k, tBConc, fNSpeciesInSystem );
+		NewtonSolve( fNewtonInfo, FALSE, TRUE, fSsInfo );
+		if ( !fNewtonInfo->converged ) {
+			for ( i = fNSpeciesInSystem; i < fNSpecies; ++i ) {
+				c[i] = 1.0e-10;
+			}
+			fSsInfo->SetSteadyStateInfo( c, k, tBConc, fNSpeciesInSystem );
+			NewtonSolve( fNewtonInfo, FALSE, TRUE, fSsInfo );
+			if ( !fNewtonInfo->converged ) {
+				fprintf( stderr, "# newton's method failed after %d steps.\n", fNewtonInfo->step );
+			}
+		}
+	}
+	else {
+		::ComputeSteadyStates( k, c, tBConc );
+		for ( i = fNSpeciesInSystem; i < fNSpecies; ++i ) {
+			if ( molarMass[i] / density * c[i] > 1.0 ) {
+//				fprintf( stderr, "warning: steady state concentration: Y_%d = %g\n", i, molarMass[i] / density * c[i] );
+			  //				if ( molarMass[i] / density * c[i] > 1.0 ) {
+			  //	   	c[i] = 1.0;
+			  //	}
+				c[i] = density/molarMass[i];
+			}
+		}
+	}
+
+// compute massfractions
+	for ( int j = fNSpeciesInSystem; j < fNSpecies; ++j ) {
+		Y[j] = molarMass[j] / density * c[j];
+	}
+/*	for ( j = 0; j < fNSpecies; ++j ) {
+		Y[j] = molarMass[j] / density * c[j];
+		fprintf( stderr, "C_%d = %g\n", j, c[j] );
+	}*/
+}
+
+//Corrext the reaction rates with the ratio of the densities
+void TReaction::UpdateReactionRates(Double *w, Double *Ynew, Double *Yold, Double *molarMass, Double oldMolarMass, int index){
+
+     Double  fact= 1.0 / ( 1.0 - oldMolarMass / molarMass[index] * (Yold[index]-Ynew[index]) );
+
+     for (int i=0; i<GetNOfReactions(); ++i ) {
+
+	  Double  *nu = fNu[i]->vec;
+	  int     *speciesNumber = fSpeciesNumber[i]->vec;
+	  int     nEducts = fNEducts->vec[i];
+
+	  for ( int j = 0; j < nEducts; ++j ) {
+	    if ( nu[j] == 1 )
+	      w[i]*= fact;
+	    else
+	      w[i]*= pow(fact, nu[j]);
+	  }
+
+	  if ( fWithThirdBody[i] && !IsWithLindemann( i ) )
+	    w[i]*= fact;  
+
+	}
+}
+
+void TReaction::ComputeReactionRate( int i, Double &w, Double &k, Double *c, Double *tBConc )
+{
+	Double	*nu = fNu[i]->vec;
+	int		*speciesNumber = fSpeciesNumber[i]->vec;
+	int		nEducts = fNEducts->vec[i];
+
+	w = k;
+	for ( int j = 0; j < nEducts; ++j ) {
+		if ( nu[j] == 1 ) {
+			w *= c[speciesNumber[j]];
+		}
+		else {
+			w *= pow( c[speciesNumber[j]], nu[j] );
+		}
+	}
+	if ( fWithThirdBody[i] && !IsWithLindemann( i ) ) {
+		w *= tBConc[fThirdBodyNumber->vec[i]];
+	}
+}
+
+void TReaction::ComputeReactionRate( int i, Double &w, Double &k, Double *tBConc, Double density, Double *Y, Double *molarMass )
+{
+	int	number;
+	Double	*nu = fNu[i]->vec;
+	int		*speciesNumber = fSpeciesNumber[i]->vec;
+	int		nEducts = fNEducts->vec[i];
+
+	w = k;
+	for ( int j = 0; j < nEducts; ++j ) {
+		number = speciesNumber[j];
+		if ( nu[j] > 1 ) {
+			w *= pow( density * Y[number] / molarMass[number], nu[j] );
+		}
+		else {
+			w *= density * Y[number] / molarMass[number];
+		}
+	}
+	if ( fWithThirdBody[i] && !IsWithLindemann( i ) ) {
+		w *= tBConc[fThirdBodyNumber->vec[i]];
+	}
+}
+
+int TReaction::PrintReactionEquation( int number, TSpeciesPtr species, FILE *fp )
+{
+	int 			i;
+	Flag			first = TRUE;
+	Double			*nu = fNu[number]->vec;
+	int				*speciesNumber = fSpeciesNumber[number]->vec;
+//	char			*thirdBody = NULL;
+	char			**names = species->GetNames();
+	int				len = 0;
+
+# if defined (applec) || defined (powerc)
+	SpinCursor( 1 );
+#endif
+
+/*  print left side of equation  */
+	for ( i = 0; i < GetNOfSpeciesPerReaction( number ); ++i ) {
+		if ( nu[i] > 0.0 ) {
+			if ( first ) {
+				if ( fabs( nu[i] ) != 1.0 ) {
+ 					len += fprintf( fp, "%g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, "%s", names[speciesNumber[i]] );
+				}
+				first = FALSE;
+			}
+			else {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					len += fprintf( fp, " + %g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, " + %s", names[speciesNumber[i]] );
+				}
+			}
+		}
+	}
+
+	if ( fWithThirdBody[number] ) {
+		len += fprintf( fp, " + M" );
+		for ( int j = 0; j < fThirdBodyNumber->vec[number]; ++j ) {
+			len += fprintf( fp, "'" );
+		}
+	}
+
+/*  print assignment operator  */
+	if ( fPartialEquilibrium[number] ) {
+		len += fprintf( fp, " = " );
+	}
+	else {
+		len += fprintf( fp, " = " );
+	}
+
+/*  print right side of equation  */
+	first = TRUE;
+	for ( i = 0; i < GetNOfSpeciesPerReaction( number ); ++i ) {
+		if ( nu[i] < 0.0 ) {
+			if ( first ) {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					len += fprintf( fp, "%g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, "%s", names[speciesNumber[i]] );
+				}
+				first = FALSE;
+			}
+			else {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					len += fprintf( fp, " + %g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, " + %s", names[speciesNumber[i]] );
+				}
+			}
+		}
+	}
+
+	if ( fWithThirdBody[number] ) {
+		len += fprintf( fp, " + M" );
+		for ( int j = 0; j < fThirdBodyNumber->vec[number]; ++j ) {
+			len += fprintf( fp, "'" );
+		}
+	}
+	
+	return len;
+}
+
+int TReaction::PrintRoggsReactionEquation( int number, TSpeciesPtr species, FILE *fp )
+{
+	int 			i;
+	Flag			first = TRUE;
+	Double			*nu = fNu[number]->vec;
+	int				*speciesNumber = fSpeciesNumber[number]->vec;
+//	char			*thirdBody = NULL;
+	char			**names = species->GetNames();
+	int				len = 0;
+
+# if defined (applec) || defined (powerc)
+	SpinCursor( 1 );
+#endif
+
+/*  print left side of equation  */
+	for ( i = 0; i < GetNOfSpeciesPerReaction( number ); ++i ) {
+		if ( nu[i] > 0.0 ) {
+			if ( first ) {
+				if ( fabs( nu[i] ) != 1.0 ) {
+ 					len += fprintf( fp, "%g %-8s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, "%-8s", names[speciesNumber[i]] );
+				}
+				first = FALSE;
+			}
+			else {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					len += fprintf( fp, "+%g %-8s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, "+%-8s", names[speciesNumber[i]] );
+				}
+			}
+		}
+	}
+
+	if ( fWithThirdBody[number] ) {
+		len += fprintf( fp, "+%-8s", "M" );
+/*		for ( int j = 0; j < fThirdBodyNumber->vec[number]; ++j ) {
+			len += fprintf( fp, "'" );
+		}*/
+	}
+
+/*  print assignment operator  */
+	if ( fPartialEquilibrium[number] ) {
+		len += fprintf( fp, "=" );
+	}
+	else {
+		len += fprintf( fp, "=" );
+	}
+
+/*  print right side of equation  */
+	first = TRUE;
+	for ( i = 0; i < GetNOfSpeciesPerReaction( number ); ++i ) {
+		if ( nu[i] < 0.0 ) {
+			if ( first ) {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					len += fprintf( fp, "%g %-8s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, "%-8s", names[speciesNumber[i]] );
+				}
+				first = FALSE;
+			}
+			else {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					len += fprintf( fp, "+%g %-8s", fabs( nu[i] ), names[speciesNumber[i]] );
+				}
+				else {
+					len += fprintf( fp, "+%-8s", names[speciesNumber[i]] );
+				}
+			}
+		}
+	}
+
+	if ( fWithThirdBody[number] ) {
+		len += fprintf( fp, "+%-8s", "M" );
+/*		for ( int j = 0; j < fThirdBodyNumber->vec[number]; ++j ) {
+			len += fprintf( fp, "'" );
+		}*/
+	}
+	
+	return len;
+}
+
+void TReaction::PrintReactionEquation( int number, TSpeciesPtr species, char *string )
+{
+	int 			i;
+	Flag			first = TRUE;
+	Double			*nu = fNu[number]->vec;
+	int				*speciesNumber = fSpeciesNumber[number]->vec;
+//	char			*thirdBody = NULL;
+	char			**names = species->GetNames();
+	char			strtemp[128];
+
+	string[0] = '\0';
+
+# if defined (applec) || defined (powerc)
+	SpinCursor( 1 );
+#endif
+
+/*  print left side of equation  */
+	for ( i = 0; i < GetNOfSpeciesPerReaction( number ); ++i ) {
+		if ( nu[i] > 0.0 ) {
+			if ( first ) {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					sprintf( strtemp, "%g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+				else {
+					sprintf( strtemp, "%s", names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+				first = FALSE;
+			}
+			else {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					sprintf( strtemp, " + %g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+				else {
+					sprintf( strtemp, " + %s", names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+			}
+		}
+	}
+
+	if ( fWithThirdBody[number] ) {
+		sprintf( strtemp, " + %s", fThirdBodyName[fThirdBodyNumber->vec[number]] );
+		strcat( string, strtemp );
+	}
+
+/*  print assignment operator  */
+	sprintf( strtemp, " = " );
+	strcat( string, strtemp );
+
+/*  print right side of equation  */
+	first = TRUE;
+	for ( i = 0; i < GetNOfSpeciesPerReaction( number ); ++i ) {
+		if ( nu[i] < 0.0 ) {
+			if ( first ) {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					sprintf( strtemp, "%g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+				else {
+					sprintf( strtemp, "%s", names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+				first = FALSE;
+			}
+			else {
+				if ( fabs( nu[i] ) != 1.0 ) {
+					sprintf( strtemp, " + %g %s", fabs( nu[i] ), names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+				else {
+					sprintf( strtemp, " + %s", names[speciesNumber[i]] );
+					strcat( string, strtemp );
+				}
+			}
+		}
+	}
+
+	if ( fWithThirdBody[number] ) {
+		sprintf( strtemp, " + %s", fThirdBodyName[fThirdBodyNumber->vec[number]] );
+		strcat( string, strtemp );
+	}
+}
+
+void TReaction::CompThirdBodyConcs( Double *tBodyConc, Double *Y, Double *molarMass, Double density )
+{
+	for ( int i = 0; i < GetNOfThirdBodies(); ++i ) { 
+		CompThirdBodyConc( i, tBodyConc[i], Y, molarMass, density );
+	}
+}
+
+void TReaction::CompThirdBodyConc( int i, Double &tBodyConc, Double *Y, Double *molarMass, Double density )
+{
+	
+//   	int		nOfSpecies = GetNSpeciesForTB();
+	int		*number;
+	Double 	*coeffi = fTBSpeciesCoeffs->mat[i];
+	
+	number = fTBSpeciesNumber[i]->vec;
+	tBodyConc = 0.0;
+	for ( int j = 0; j < fNSpecies; ++j ) {
+//		fprintf( stderr, "%d: c = %g\tY = %g\n", number[j], coeffi[j], Y[number[j]] );
+		if ( coeffi[j] ) {
+			tBodyConc += coeffi[j] * Y[number[j]] / molarMass[number[j]];
+		}
+	}
+	tBodyConc *= density;
+//	cerr << "tBodyConc = " << tBodyConc << NEWL;
+}
+
+void TReaction::FilldMdTOnePointAnal( Double *dMdT, Double temp, Double *reactionRate
+						, Double *rateCoeff, Double pressure, Double *molarMass, Double *tBConc )
+{
+	int			i, j;
+	int			nEducts;
+	int 		nSpeciesPerReaction;
+	Double		sumNu;
+	Double		dwdT;
+	int			*speciesNumber;
+	Double		*nu;
+	int		 	nOfReaction = GetNOfReactions();
+	Double		*n = fN->vec;
+	Double		*eOverR = fEOverRgas->vec;
+	
+	Clear1DArray( dMdT, fNSpeciesInSystem );
+	
+	for ( j = 0; j < nOfReaction; ++j ) {
+		nEducts = fNEducts->vec[j];
+		nSpeciesPerReaction = GetNOfSpeciesPerReaction( j );
+		speciesNumber = fSpeciesNumber[j]->vec;
+		nu = fNu[j]->vec;
+		
+		for ( i = 0, sumNu = 0.0; i < nEducts; ++i ) {
+			sumNu += nu[i];
+		}
+		if ( fWithThirdBody[j] && !IsWithLindemann( j ) ) {
+			sumNu += 1.0;
+		}
+		
+		if ( IsWithLindemann( j ) ) {
+			dwdT = reactionRate[j] * ( ComputedkdT( j, temp, pressure, rateCoeff[j], tBConc ) / rateCoeff[j] - sumNu / temp );
+		}
+		else{
+			dwdT = reactionRate[j] / temp * ( n[j] + eOverR[j] / temp - sumNu );
+		}
+		
+		for ( i = 0; i < nSpeciesPerReaction; ++i ) {
+			dMdT[speciesNumber[i]] += nu[i] * dwdT;
+		}
+	}
+	
+	for ( i = 0; i < fNSpeciesInSystem; ++i ) {
+		dMdT[i] *= - molarMass[i];
+	}
+}
+
+void TReaction::FilldMdYOnePointAnal( Double **dMdY, Double *Y, Double *reactionRate
+						, Double mixMolarMass, Double *molarMass, Double */*tBodyConc*/
+						, Double */*productionRate*/, Double /*mixDensity*/ )
+{
+	int		i, j, l;
+	int 	nOfReaction = GetNOfReactions();
+	int		nSpeciesInSystem = fNSpeciesInSystem;
+	int 	nSpeciesPerReaction;
+	int		nEducts;
+	int		speciesIndexM;
+	int		speciesIndexL;
+	Double	coeffj;
+	Double	coeffi;
+	int		*speciesNumber;
+	Double	*nu;
+	Double	*sumEducts = fSumEducts->vec;
+	const Double dNull = 0.0;
+		
+	Clear2DArray( dMdY, nSpeciesInSystem, nSpeciesInSystem );
+	
+	for ( j = 0; j < nOfReaction; ++j ) {
+		//	dM_(all species which appear in reaction j)/dY_(all educts which appear in reaction j)
+		//	dM_(speciesNumber[i])/dY_(speciesNumber[l])
+		//	dMdY[l][i]
+		nEducts = fNEducts->vec[j];
+		nu = fNu[j]->vec;
+		speciesNumber = fSpeciesNumber[j]->vec;
+		nSpeciesPerReaction = GetNOfSpeciesPerReaction( j );
+		coeffj = reactionRate[j] * sumEducts[j] * mixMolarMass;
+		for ( i = 0; i < nSpeciesPerReaction; ++i ) {
+			speciesIndexM = speciesNumber[i];
+			coeffi = coeffj * nu[i];
+			for ( l = 0; l < nSpeciesInSystem; ++l ) {
+				dMdY[l][speciesIndexM] -= coeffi / molarMass[l];
+			}
+			for ( l = 0; l < nEducts; ++l ) {
+				speciesIndexL = speciesNumber[l];
+				coeffi = nu[i] * reactionRate[j];
+				if ( Y[speciesIndexL] > dNull ) {
+					dMdY[speciesIndexL][speciesIndexM] += coeffi 
+							* nu[l] / Y[speciesIndexL];
+				}
+			}
+		}
+		
+	}
+	
+	Double minusM;
+	for ( speciesIndexM = 0; speciesIndexM < nSpeciesInSystem; ++speciesIndexM ) {
+		minusM = - molarMass[speciesIndexM];
+		for ( speciesIndexL = 0; speciesIndexL < nSpeciesInSystem; ++speciesIndexL ) {
+			dMdY[speciesIndexL][speciesIndexM] *= minusM;
+		}
+	}
+}
+
+void T0DReaction::InitT0DReaction( TInputDataPtr input )
+{
+	CounterPtr	counter = input->GetCounter();
+	int 		nOfReactions = counter->reactions;
+	int			nOfThirdBodies = counter->thirdBodies;
+	int			nOfSpecies = counter->species;
+	
+	if ( nOfThirdBodies ) {
+		fTBConc = NewVector( nOfThirdBodies );
+	}
+	else {
+		fTBConc = NULL;
+	}
+	fRateCoefficients = NewVector( nOfReactions );
+	fReactionRate = NewVector( nOfReactions );
+	fCurrReactionRate = NewVector( nOfReactions );
+	fCurrRateCoefficients = NewVector( nOfReactions );
+	fCurrConc = NewVector( nOfSpecies );
+}
+
+T0DReaction::~T0DReaction( void )
+{
+	DisposeVector( fCurrConc );
+	DisposeVector( fCurrRateCoefficients );
+	DisposeVector( fCurrReactionRate );
+	DisposeVector( fReactionRate );
+	DisposeVector( fRateCoefficients );
+	if ( fTBConc ) {
+		DisposeVector( fTBConc );
+	}
+}
+
+void SteadyStateInfo::SetSteadyStateInfo( Double *cIn, Double *kIn, Double *MIn, int speciesInIn )
+{
+	c = cIn;
+	k = kIn;
+	M = MIn;
+	speciesIn = speciesInIn;
+}
+
+void SteadyStateInfo::GetSteadyStateInfo( Double **cIn, Double **kIn, Double **MIn, int *speciesInIn )
+{
+	*cIn = c;
+	*kIn = k;
+	*MIn = M;
+	*speciesInIn = speciesIn;
+}
+
+#ifndef ZEROD
+void T1DReaction::InitT1DReaction( TInputDataPtr input )
+{
+	CounterPtr	counter = input->GetCounter();
+	int 		nOfReactions = counter->reactions;
+	int			nOfSpecies = counter->species;
+	int			nOfGridPoints = input->fMaxGridPoints;
+	int			nSpeciesInSystem = nOfSpecies - counter->steadyStates;
+	int			nOfThirdBodies = counter->thirdBodies;
+	
+	fRateCoefficients = NewMatrix( nOfReactions, nOfGridPoints, kColumnPointers );
+	fReactionRate = NewMatrix( nOfReactions, nOfGridPoints, kColumnPointers );
+
+	if ( nOfThirdBodies ) {
+		fTBConcentrations = NewMatrix( nOfThirdBodies, nOfGridPoints, kColumnPointers );
+	}
+	else {
+		fTBConcentrations = NewMatrix( 1, nOfGridPoints, kColumnPointers );;
+	}
+    fDmdy = NewTensor( nOfGridPoints, nSpeciesInSystem, nSpeciesInSystem+1, kColumnPointers );
+
+	fTempReaction = NewVector( nOfGridPoints );
+	fPressureReaction = NewVector( nOfGridPoints );
+	fYReaction = NewMatrix( nOfSpecies, nOfGridPoints, kColumnPointers );
+	fCurrReactionRate = NewMatrix( nOfReactions, nOfGridPoints, kColumnPointers );
+	fCurrRateCoefficients = NewMatrix( nOfReactions, nOfGridPoints, kColumnPointers );
+	fKNewerThanW = new Flag[nOfGridPoints];
+}
+
+T1DReaction::~T1DReaction( void )
+{
+	delete fKNewerThanW;
+	DisposeMatrix( fCurrRateCoefficients );
+	DisposeMatrix( fCurrReactionRate );
+	DisposeMatrix( fYReaction );
+	DisposeVector( fPressureReaction );
+	DisposeVector( fTempReaction );
+	DisposeTensor( fDmdy );
+	if ( fTBConcentrations ) {
+		DisposeMatrix ( fTBConcentrations );
+	}
+	DisposeMatrix ( fReactionRate );
+	DisposeMatrix ( fRateCoefficients );
+}
+
+void T1DReaction::PrintReactions( int k, TSpeciesPtr species )
+{
+	FILE	*fp;
+
+	if ( !(fp = fopen( "reaction.tout", "w" )) ) { 
+		cerr << "#warning: unable to open file 'reaction.tout'" << NEWL;
+		return;
+	}
+	fprintf( fp, "GridPoint no. %d\n", k );
+   	for ( int i = 0; i < GetNOfReactions(); ++i ) {
+		PrintReactions( i, k, species, fp );
+	}
+	fclose( fp );
+}
+
+void T1DReaction::PrintReactions( int number, int gridPoint, TSpeciesPtr species, FILE *fp )
+{
+	int i;	
+	static Flag init = FALSE;
+	
+	if ( !fp ) {
+		if ( !init ) {
+			if ( !(fp = fopen( "reaction.tout", "w" ) ) ) { 
+				cerr << "#warning: unable to open file 'reaction.tout'" << NEWL;
+				return;
+			}
+		}
+		else {
+			if ( !(fp = fopen( "reaction.tout", "a" )) ) { 
+				cerr << "#warning: unable to open file 'reaction.tout'" << NEWL;
+				return;
+			}
+		}
+	}
+	init = TRUE;
+	
+	fprintf( fp, "%s is no. %d has %d different educts and %g educt molecules:\n", fLabels[number], number, fNEducts->vec[number], fSumEducts->vec[number] );
+
+	PrintReactionEquation( number, species, fp );
+	fprintf( fp, "\n" );
+	fprintf( fp, "A = %g\n", fA->vec[number] );
+	fprintf( fp, "n = %g\n", fN->vec[number] );
+	fprintf( fp, "E/R = %g\n", fEOverRgas->vec[number] );
+	if ( fAInf->vec[number] ) {
+		fprintf( fp, "AInf = %g\n", fAInf->vec[number] );
+		fprintf( fp, "nInf = %g\n", fNInf->vec[number] );
+		fprintf( fp, "EInf/R = %g\n", fEInfOverRgas->vec[number] );
+		fprintf( fp, "this reaction uses the broadeningfactor no. %d\n", fLindemannNumber->vec[number] );
+	}
+
+	fprintf( fp, "the reaction contains = \n" );
+	for ( i = 0; i < GetNOfSpeciesPerReaction( number ); ++i ) {
+		fprintf( fp, "\t%g of species no. %d", fNu[number]->vec[i], fSpeciesNumber[number]->vec[i] );
+	}
+	fprintf( fp, "\n");
+	
+	fprintf( fp, "k = %g\n", fRateCoefficients->mat[gridPoint][number] );
+	fprintf( fp, "w = %g [mole/cm^3] = %g [kmole/m^3]\n", fReactionRate->mat[gridPoint][number] / 1000, fReactionRate->mat[gridPoint][number] ); // print in [mole/cm^3]
+	
+	if ( fPartialEquilibrium[number] ) {
+		fprintf( fp, "reaction is in partial equilibrium\n");
+	}
+	
+	if ( fWithThirdBody[number] ) {
+		fprintf( fp, "reaction contains thirdbody no. %d\n", fThirdBodyNumber->vec[number] );
+		fprintf( fp, "thirdbody no. %d contains\n", fThirdBodyNumber->vec[number] );
+		for ( i = 0; i < GetNSpeciesForTB(); ++i ) {
+			fprintf( fp, "\t%g of species no. %d", fTBSpeciesCoeffs->mat[fThirdBodyNumber->vec[number]][i], fTBSpeciesNumber[fThirdBodyNumber->vec[number]]->vec[i] );
+		}
+		fprintf( fp, "\nand has a concentration of %g\n", fTBConcentrations->mat[gridPoint][fThirdBodyNumber->vec[number]] );
+	}
+	
+	fprintf( fp, "\n\n\n");
+}
+
+void T1DReaction::UpdateDMdY( T1DFlamePtr flame, TAdaptiveGridPtr grid, Double pressure )
+{
+	int				k;
+	TFlameNodePtr	flameNode = flame->GetFlameNode();
+	TGridPtr		currentGrid = grid->GetCurrentGrid();
+	int				currentGridPoints = currentGrid->GetNGridPoints();
+	Double			*molarMass = flame->GetSpecies()->GetMolarMass()->vec;
+	int				tempOffset = flame->GetOffsetTemperature();
+	int				speciesOffset = flame->GetOffsetFirstSpecies();
+	
+//	ClearDmdy();
+
+	for ( k = 0; k < currentGridPoints; ++k ) {
+#if defined (applec) || defined (powerc)
+	RotateCursor( 32 );
+#endif
+		flame->SetFlameNode( k );
+		FilldMdYOnePointAnal( flameNode, molarMass );
+		FilldMdTOnePointAnal( flameNode, pressure, molarMass );
+	}
+}
+
+void T1DReaction::FilldMdTOnePointAnal( TFlameNodePtr flameNode, Double pressure, Double *molarMass )
+{
+	int			i, j;
+	int			nEducts;
+	int 		nSpeciesPerReaction;
+	Double		sumNu;
+	Double		dwdT;
+	int			*speciesNumber;
+	Double		*nu;
+	int		 	nOfReaction = GetNOfReactions();
+	int			nSpeciesInSystem = GetNSpeciesInSystem();
+	Double		temp = flameNode->temp[kCurr];
+	Double		*reactionRate = flameNode->reactionRate;
+	Double		*rateCoeff = flameNode->rateCoeff;
+	Double		*tBConc = flameNode->tBodyConc;
+	Double		*n = fN->vec;
+	Double		*eOverR = fEOverRgas->vec;
+	Double		*dMdT = flameNode->dMdY[nSpeciesInSystem];
+	
+	Clear1DArray( dMdT, nSpeciesInSystem );
+	
+	for ( j = 0; j < nOfReaction; ++j ) {
+		nEducts = fNEducts->vec[j];
+		nSpeciesPerReaction = GetNOfSpeciesPerReaction( j );
+		speciesNumber = fSpeciesNumber[j]->vec;
+		nu = fNu[j]->vec;
+		
+		for ( i = 0, sumNu = 0.0; i < nEducts; ++i ) {
+			sumNu += nu[i];
+		}
+		if ( fWithThirdBody[j] && !IsWithLindemann( j ) ) {
+			sumNu += 1.0;
+		}
+		
+		if ( IsWithLindemann( j ) ) {
+			dwdT = reactionRate[j] * ( ComputedkdT( j, temp, pressure, rateCoeff[j], tBConc ) / rateCoeff[j] - sumNu / temp );
+		}
+		else{
+			dwdT = reactionRate[j] / temp * ( n[j] + eOverR[j] / temp - sumNu );
+		}
+		
+		for ( i = 0; i < nSpeciesPerReaction; ++i ) {
+			dMdT[speciesNumber[i]] += nu[i] * dwdT;
+		}
+	}
+	
+	for ( i = 0; i < nSpeciesInSystem; ++i ) {
+		dMdT[i] *= - molarMass[i];
+	}
+}
+
+void T1DReaction::FilldMdYOnePointAnal( TFlameNodePtr flameNode, Double *molarMass )
+{
+	int		i, j, l;
+	int 	nOfReaction = GetNOfReactions();
+	int		nSpeciesInSystem = GetNSpeciesInSystem();
+	int 	nSpeciesPerReaction;
+	int		nEducts;
+	int		speciesIndexM;
+	int		speciesIndexL;
+	Double	mixMolarMass = *flameNode->mixMolarMass;
+	Double	coeffj;
+	Double	coeffi;
+	int		*speciesNumber;
+	Double	*nu;
+	Double	*sumEducts = fSumEducts->vec;
+	Double	*Y = flameNode->Y[kCurr];
+	Double	*reactionRate = flameNode->reactionRate;
+	Double	**dMdY = flameNode->dMdY;
+	const Double dNull = 0.0;
+		
+	Clear2DArray( dMdY, nSpeciesInSystem, nSpeciesInSystem );
+	
+	for ( j = 0; j < nOfReaction; ++j ) {
+		//	dM_(all species which appear in reaction j)/dY_(all educts which appear in reaction j)
+		//	dM_(speciesNumber[i])/dY_(speciesNumber[l])
+		//	dMdY[l][i]
+		nEducts = fNEducts->vec[j];
+		nu = fNu[j]->vec;
+		speciesNumber = fSpeciesNumber[j]->vec;
+		nSpeciesPerReaction = GetNOfSpeciesPerReaction( j );
+		coeffj = reactionRate[j] * sumEducts[j] * mixMolarMass;
+		for ( i = 0; i < nSpeciesPerReaction; ++i ) {
+			speciesIndexM = speciesNumber[i];
+			coeffi = coeffj * nu[i];
+			for ( l = 0; l < nSpeciesInSystem; ++l ) {
+				dMdY[l][speciesIndexM] -= coeffi / molarMass[l];
+			}
+			for ( l = 0; l < nEducts; ++l ) {
+				speciesIndexL = speciesNumber[l];
+				coeffi = nu[i] * reactionRate[j];
+				if ( Y[speciesIndexL] > dNull ) {
+					dMdY[speciesIndexL][speciesIndexM] += coeffi 
+							* nu[l] / Y[speciesIndexL];
+				}
+			}
+		}
+		
+	}
+	
+	Double minusM;
+	for ( speciesIndexM = 0; speciesIndexM < nSpeciesInSystem; ++speciesIndexM ) {
+		minusM = - molarMass[speciesIndexM];
+		for ( speciesIndexL = 0; speciesIndexL < nSpeciesInSystem; ++speciesIndexL ) {
+			dMdY[speciesIndexL][speciesIndexM] *= minusM;
+		}
+	}
+}
+
+void T1DReaction::PrintDmdY( T1DFlamePtr flame )
+{
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	TGridPtr	grid = bt->GetGrid()->GetFine();
+	int			nGridPoints = grid->GetNGridPoints();
+	FILE		*fp = fopen( "dMdY.tout", "w" );
+
+	if ( !fp ) {
+		cerr << "#warning: unable to open file 'dMdY.tout'" << NEWL;
+		return;
+	}
+	for ( int k = 0; k < nGridPoints; ++k ) {
+		PrintDmdY( flame, k, fp );
+	}
+	fclose( fp );
+}
+
+void T1DReaction::PrintDmdY( T1DFlamePtr flame, int k, FILE *fp )
+{
+	int			i, j;
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	TGridPtr	grid = bt->GetGrid()->GetFine();
+	T1DSpeciesPtr	species = flame->GetSpecies();
+	int			nSpeciesInSystem = species->GetNSpeciesInSystem();
+	int			tempOffset = flame->GetOffsetTemperature();
+	Double		temp = grid->GetY()->mat[k][tempOffset];
+	Double		*productionRate = species->GetProductionRate()->mat[k];
+	Double		**dmdY = fDmdy->tensor[k];
+	Flag		singlePoint = FALSE;
+
+	if ( !fp ) {
+		fp = fopen( "dMdYSinglePoint.tout", "a" );
+		if ( !fp ) {
+			cerr << "#warning: unable to open file 'dMdY.tout'" << NEWL;
+			return;
+		}
+
+		singlePoint = TRUE;
+	}
+	
+
+	fprintf( fp, "---------------------------------------------------------------------------------\n" );
+	fprintf( fp, "GridPoint = %d\t\tTemperature = %g K\n", k, temp );
+	fprintf( fp, "---------------------------------------------------------------------------------\n" );
+	fprintf( fp, "---------------------------------------------------------------------------------\n" );
+	fprintf( fp, "Source terms:\n" );
+	for ( i = 0; i < nSpeciesInSystem; ++i ) {
+		fprintf( fp, "%-12s%14.5g\n", species->GetNames()[i], productionRate[i]/1.0e6 );
+	}
+	fprintf( fp, "---------------------------------------------------------------------------------\n" );
+	fprintf( fp, "---------------------------------------------------------------------------------\n" );
+	fprintf( fp, "grad m\n" );
+	fprintf( fp, "======\n" );
+
+	fprintf( fp, "            " );
+	for ( i = 0; i < nSpeciesInSystem; ++i ) {
+		fprintf( fp, "%14s", species->GetNames()[i] );
+	}
+	fprintf( fp, "%14s\n", "T" );
+
+	for ( i = 0; i < nSpeciesInSystem; ++i ) {
+		fprintf( fp, "%-12s", species->GetNames()[i] );
+		for ( j = 0; j < nSpeciesInSystem+1; ++j ) {
+			fprintf( fp, "%14.5g", dmdY[j][i]*1.0e-6 );
+		}
+		fprintf( fp, "\n" );
+	}
+	fprintf( fp, "---------------------------------------------------------------------------------\n" );
+	
+	if ( singlePoint ) {
+		fclose( fp );
+	}
+}
+
+void T1DReaction::PrintReactionRates( T1DFlamePtr flame )
+{
+	int		j,k;
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	TGridPtr	grid = bt->GetGrid()->GetFine();
+	int		nGridPoints = grid->GetNGridPoints();
+	int		nReactions = GetNOfReactions();
+
+	//PP 
+	//Double	*x = grid->GetX()->vec;
+	//Double	**reactionRate = GetReactionRate()->mat;
+	VectorPtr       x = NewVector( nGridPoints+2 );
+	MatrixPtr       reactionRate = NewMatrix( nReactions, nGridPoints+2, kColumnPointers );
+	//PP
+
+	char		**labels = GetLabels();
+	char		**titles = new char*[nReactions];
+	char		eq[512];
+	char		reac[512];
+
+        // header
+	for ( j = 0; j < nReactions; ++j ) {
+
+	        //PP
+	        //     	PrintReactionEquation( j, flame->GetSpecies(), eq );
+	        //	sprintf( reac, "%s:%-s", labels[j], eq );
+	        sprintf( reac, "%s", labels[j] );
+		//PP
+
+		titles[j] = new char[ strlen( reac ) + 1 ];
+		strcpy( titles[j], reac );
+	}
+
+	//PP Add first and last point, with reaction rate = 0 for each reaction
+	x->vec[0] = bt->GetLeft();
+	for ( j = 0; j < nReactions; ++j ) {
+	  reactionRate->mat[0][j] = 1.0e-15;
+	}
+	
+	for (k = 0; k < nGridPoints; ++k){
+	  x->vec[k+1] = grid->GetX()->vec[k];
+	  for ( j = 0; j < nReactions; ++j ) {
+	    reactionRate->mat[k+1][j] = GetReactionRate()->mat[k][j];
+	  }
+	}
+
+	x->vec[nGridPoints+1] = bt->GetRight();
+	for ( j = 0; j < nReactions; ++j ) {
+	  reactionRate->mat[nGridPoints+1][j] = 1.0e-15;
+	}
+	//PP
+	
+	sprintf( flame->GetOutFileBuff(), "%s%s", flame->GetOutputPath(), "ReacRates" );
+	//PP SaveArray( reactionRate, nGridPoints, nReactions, kRowPointers, x, titles, flame->GetOutFileBuff() );
+	SaveArray( reactionRate->mat, nGridPoints+2, nReactions, kRowPointers, x->vec, titles, flame->GetOutFileBuff() );
+
+		
+	// Clean up
+	for ( j = 0; j < nReactions; ++j ) {
+		delete( titles[j] );
+	}
+	delete( titles );
+
+	//PP
+	DisposeMatrix( reactionRate );
+	DisposeVector( x );
+	//PP
+}
+
+void T1DReaction::PrintRateCoeffs( T1DFlamePtr flame )
+{
+	int		j,k;
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	TGridPtr	grid = bt->GetGrid()->GetFine();
+	int		nGridPoints = grid->GetNGridPoints();
+	int		nReactions = GetNOfReactions();
+
+	//PP 
+	//Double	*x = grid->GetX()->vec;
+	//Double	**rateCoeffs = fRateCoefficients->mat;
+	VectorPtr       x = NewVector( nGridPoints+2 );
+	MatrixPtr       rateCoeffs = NewMatrix( nReactions, nGridPoints+2, kColumnPointers );
+	//PP
+
+	char		**labels = GetLabels();
+	char		**titles = new char*[nReactions];
+	char		eq[512];
+	char		reac[512];
+
+//	header
+	for ( j = 0; j < nReactions; ++j ) {
+
+	        //PP
+		//       PrintReactionEquation( j, flame->GetSpecies(), eq );
+		//       sprintf( reac, "%-5s:%-s", labels[j], eq );
+	        sprintf( reac, "%s", labels[j] );
+		//PP
+
+		titles[j] = new char[ strlen( reac ) + 1 ];
+		strcpy( titles[j], reac );
+	}
+
+	//PP Add first and last point, with reaction rate = 0 for each reaction
+	x->vec[0] = bt->GetLeft();
+	for ( j = 0; j < nReactions; ++j ) {
+	  rateCoeffs->mat[0][j] = 1.0e-15;
+	}
+	
+	for (k = 0; k < nGridPoints; ++k){
+	  x->vec[k+1] = grid->GetX()->vec[k];
+	  for ( j = 0; j < nReactions; ++j ) {
+	    rateCoeffs->mat[k+1][j] = fRateCoefficients->mat[k][j];
+	  }
+	}
+
+	x->vec[nGridPoints+1] = bt->GetRight();
+	for ( j = 0; j < nReactions; ++j ) {
+	  rateCoeffs->mat[nGridPoints+1][j] = 1.0e-15;
+	}
+	//PP
+
+	sprintf( flame->GetOutFileBuff(), "%s%s", flame->GetOutputPath(), "RateCoeffs" );
+	//PPSaveArray( rateCoeffs, nGridPoints, nReactions, kRowPointers, x, titles, flame->GetOutFileBuff() );
+	SaveArray( rateCoeffs->mat, nGridPoints+2, nReactions, kRowPointers, x->vec, titles, flame->GetOutFileBuff() );
+		
+	// Clean up
+	for ( j = 0; j < nReactions; ++j ) {
+		delete( titles[j] );
+	}
+	delete( titles );
+
+	//PP
+	DisposeMatrix( rateCoeffs );
+	DisposeVector( x );
+	//PP
+}
+
+//PP detailed Heat release computation used for Reduction purposes (1D cases)
+void T1DReaction::PrintDetailedHeatRelease( T1DFlamePtr flame)
+{
+	int		i,j,k;
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	TGridPtr	grid = bt->GetGrid()->GetFine();
+	int		nGridPoints = grid->GetNGridPoints();
+	int		nReactions = GetNOfReactions();
+
+	//PP 
+	//Double	*x = grid->GetX()->vec;
+	VectorPtr       x = NewVector( nGridPoints+2 );
+	//PP
+
+	Double		**reactionRate = GetReactionRate()->mat;
+	char		**labels = GetLabels();
+	char		**titles = new char*[nReactions];
+	char		eq[512];
+	char		reac[512];
+
+	MatrixPtr       heatRelease = NewMatrix( nReactions, nGridPoints+2, kColumnPointers );
+	Double          *molarMass = flame->GetSpecies()->GetMolarMass()->vec;
+	Double          **enthalpy = flame->GetSpecies()->GetEnthalpy()->mat;
+	int             specNum;
+
+        // header
+	for ( j = 0; j < nReactions; ++j ) {
+	        sprintf( reac, "%s", labels[j] );
+		titles[j] = new char[ strlen( reac ) + 1 ];
+		strcpy( titles[j], reac );
+	}
+
+	// Compute heat release for each reaction at each grid point
+	x->vec[0] = bt->GetLeft();
+	for ( j = 0; j < nReactions; ++j ) {
+	  heatRelease->mat[0][j] = 1.0e-15;
+	}
+
+	for ( i = 0; i < nGridPoints; ++i ) {
+	  x->vec[i+1] = grid->GetX()->vec[i];
+
+	  for ( j = 0; j < nReactions; ++j ) {
+	    heatRelease->mat[i+1][j] = 0;
+	    for ( k = 0; k < GetNOfSpeciesPerReaction( j ) ; ++k ) {
+	      specNum = fSpeciesNumber[j]->vec[k];
+	      heatRelease->mat[i+1][j] += -fNu[j]->vec[k] * reactionRate[i][j] * enthalpy[k][specNum] * molarMass[specNum];
+	    }
+	  }
+	}
+
+	x->vec[nGridPoints+1] = bt->GetRight();
+	for ( j = 0; j < nReactions; ++j ) {
+	  heatRelease->mat[nGridPoints+1][j] = 1.0e-15;
+	}
+
+	sprintf( flame->GetOutFileBuff(), "%s%s", flame->GetOutputPath(), "DetHR" );
+	SaveArray( heatRelease->mat, nGridPoints+2, nReactions, kRowPointers, x->vec, titles, flame->GetOutFileBuff() );
+		
+	// Clean up
+	for ( j = 0; j < nReactions; ++j ) {
+		delete( titles[j] );
+	}
+	delete( titles );
+
+	DisposeMatrix( heatRelease );
+	DisposeVector( x );
+}
+//PP
+
+void TReaction::WriteRoggsMechanismData( TSpeciesPtr species, TInputDataPtr input )
+{
+// CHCO muss von Hand in C2HO geaendert werden.
+	FILE	*fp = fopen( "roggsmechanism.data", "w" );
+	int		len;
+	ReactionPtr	reaction =	input->GetReactions();
+	int		*back = fBackwardReac->vec;
+	
+	if ( !fp ) {
+		cerr << "#warning: unable to open file 'roggsmechanism.data'" << NEWL;
+		return;
+	}
+
+	fprintf( fp, "NN  ----------ELEMENTARY REACTION-----------------!!-----A----!!ALPHA-!!---E---\n" );
+	fprintf( fp, "NN  A AND ALPHA IN CM-MOL-SEC UNITS, E IN KJ/MOLE !!-----A----!!ALPHA-!!---E---\n" );
+	fprintf( fp, "NN                                                     E10.3     F6.1     F8.1\n" );
+	fprintf( fp, "NN************************************************!!**********!!******!!*******\n" );
+	for ( int i = 0; i < GetNOfReactions(); ++i ) {
+		if ( back[i] >= 0 ) {
+			fprintf( fp, "YY " );
+		}
+		else {
+			fprintf( fp, "YN " );
+		}
+		len = PrintRoggsReactionEquation( i, species, fp );
+		do {
+			fprintf( fp, " " );
+		} while ( len++ < 45 );
+		fprintf( fp, "  %10.3e %6.1f  %8.1f\n", reaction[i].a, reaction[i].n, reaction[i].e );
+	}
+	fprintf( fp, "-END OF MEC\n" );
+	fprintf( fp, "%d\n", GetNOfThirdBodies() );
+	fprintf( fp, "M       !!CO2     !!  1.5 E 00!!\n" );
+	fprintf( fp, "M       !!H2      !!  1.  E 00!!\n" );
+	fprintf( fp, "M       !!CO      !!  0.75E 00!!\n" );
+	fprintf( fp, "M       !!O2      !!  0.40E 00!!\n" );
+	fprintf( fp, "M       !!N2      !!  0.40E 00!!\n" );
+	fprintf( fp, "M       !!H2O     !!  6.5 E 00!!\n" );
+	fprintf( fp, "-END OF THIRDBODY\n" );
+	fclose ( fp );
+}
+#endif // ZEROD
+
+#ifdef NOXPRODRATES
+#include "nHeptaneNO.red4.h"
+void T1DReaction::PrintProdRateGlobalReac( T1DFlamePtr flame )
+{
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	int			k;
+	TGridPtr	grid = bt->GetGrid()->GetCurrentGrid();
+	Double		*x = grid->GetX()->vec;
+	int			nGridPoints = bt->GetCurrentGridPoints();
+	Double			**w_mat = GetReactionRate()->mat;
+	Double			*w;
+	Double			reacRate;
+	FILE		*fp = flame->GetOutputFile( "GlobRates", "", flame->kData );
+	
+//	header
+	fprintf( fp, "*\n" );
+	fprintf( fp, "%s", "y" );
+	fprintf( fp, "\t%s", "I.    N\\d2\\n + O\\d2\\n = 2 NO" );
+	fprintf( fp, "\t%s", "IIa.  N\\d2\\n + C\\d2\\nH\\d4\\n + O\\d2\\n + OH = NO + HCN + H\\d2\\nO + CO H\\d2\\n" );
+	fprintf( fp, "\t%s", "IIb.  HCN + O\\d2\\n + H\\d2\\nO = NO + CO + H\\d2\\n + OH" );
+	fprintf( fp, "\t%s", "IIIa. N\\d2\\n + 2 OH + M = N\\d2\\nO + H\\d2\\nO + M" );
+	fprintf( fp, "\t%s", "IIIb. N\\d2\\nO + 2OH = 2 NO + H\\d2\\nO" );
+	fprintf( fp, "\t%s", "IV.   NO + H\\d2\\nO = NO\\d2\\n + H\\d2\\n" );
+	fprintf( fp, "\t%s", "Va.   NO + C\\d2\\nH\\d4\\n + OH = HNCO + CO + 2H\\d2\\n" );
+	fprintf( fp, "\t%s", "Vb.   HNCO + NO = N\\d2\\n + CO + OH" );
+	fprintf( fp, "\t%s", "VI.   NH\\d3\\n + OH = NO + 2 H\\d2\\n" );
+
+	for ( k = 0; k < nGridPoints; ++k ) {
+		w = w_mat[k];
+		fprintf( fp, "\n%-12E", x[k] );
+		// I
+		reacRate = - w[rN37f] + w[rN37b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// IIa
+		reacRate = w[rN110f] - w[rN110b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// IIb
+		reacRate = - w[rN111] - w[rN113f] + w[rN113b] + w[rN120f] - w[rN120b]
+			 	   - w[rN130f] + w[rN130b] - w[rN131f] + w[rN131b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// IIIa
+		reacRate = w[rN40f] - w[rN40b] - w[rN45f] + w[rN45b] - w[rN46yf] + w[rN46yb]
+				 - w[rN49f] + w[rN49b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// IIIb
+		reacRate = - w[rN24xf] + w[rN24xb] - w[rN24y] + w[rN47f] - w[rN47b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// IV
+		reacRate = - w[rN84f] + w[rN84b] + w[rN85f] - w[rN85b] - w[rN87f] + w[rN87b]
+				   - w[rN88f] + w[rN88b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// Va
+		reacRate =  w[rN13] + w[rN14f] - w[rN14b] + w[rN25f] - w[rN25b] 
+					- w[rN60f] + w[rN60b] - w[rN61f] + w[rN61b]  
+					- w[rN62f] + w[rN62b] - w[rN63f] + w[rN63b] 
+					- w[rN65f] + w[rN65b] + w[rN74f] - w[rN74b]
+				   + w[rN112f] - w[rN112b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// Vb
+		reacRate = w[rN13] + w[rN14f] - w[rN14b] + w[rN25f] - w[rN25b];
+		fprintf( fp, "\t%-12E", reacRate );
+		
+		// VI
+		reacRate = w[rN1f] - w[rN1b] + w[rN2f] - w[rN2b] + w[rN3f] - w[rN3b] + 
+				   w[rN4f] - w[rN4b];
+		fprintf( fp, "\t%-12E", reacRate );
+	}
+	
+	fclose( fp );
+}
+
+Double T1DReaction::ComputeEIThermalNO( T1DFlamePtr flame )
+{
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	int			k;
+	TGridPtr	grid = bt->GetGrid()->GetCurrentGrid();
+	Double		*x = grid->GetX()->vec;
+	int			nGridPoints = bt->GetCurrentGridPoints();
+	Double		**w_mat = GetReactionRate()->mat;
+	Double		*w;
+	int			indexNO = flame->GetSpecies()->FindSpecies("NO");
+	Double		molecWeightNO = flame->GetSpecies()->GetMolarMass()->vec[indexNO];
+	Double		reacRate;
+	Double		sumIPos = 0.0;
+
+	for ( k = 0; k < nGridPoints; ++k ) {
+		w = w_mat[k];
+
+		// I
+		reacRate = - w[rN37f] + w[rN37b];
+		if ( reacRate > 0 ) {
+			sumIPos += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+	}
+	return 2.0 * sumIPos;
+}
+
+Double T1DReaction::ComputeEIPromptNO( T1DFlamePtr flame )
+{
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	int			k;
+	TGridPtr	grid = bt->GetGrid()->GetCurrentGrid();
+	Double		*x = grid->GetX()->vec;
+	int			nGridPoints = bt->GetCurrentGridPoints();
+	Double		**w_mat = GetReactionRate()->mat;
+	Double		*w;
+	int			indexNO = flame->GetSpecies()->FindSpecies("NO");
+	Double		molecWeightNO = flame->GetSpecies()->GetMolarMass()->vec[indexNO];
+	Double		reacRate;
+	Double		sumIIaPos = 0.0;
+	Double		sumIIbPos = 0.0;
+
+	for ( k = 0; k < nGridPoints; ++k ) {
+		w = w_mat[k];
+		
+		// IIa
+		reacRate = w[rN110f] - w[rN110b];
+		if ( reacRate > 0 ) {
+			sumIIaPos += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+		
+		// IIb
+		reacRate = - w[rN111] - w[rN113f] + w[rN113b] + w[rN120f] - w[rN120b]
+			 	   - w[rN130f] + w[rN130b] - w[rN131f] + w[rN131b];
+		if ( reacRate > 0 ) {
+			sumIIbPos += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+	}
+	return sumIIaPos + sumIIbPos;
+}
+
+Double T1DReaction::ComputeEINitrousNO( T1DFlamePtr flame )
+{
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	int			k;
+	TGridPtr	grid = bt->GetGrid()->GetCurrentGrid();
+	Double		*x = grid->GetX()->vec;
+	int			nGridPoints = bt->GetCurrentGridPoints();
+	Double		**w_mat = GetReactionRate()->mat;
+	Double		*w;
+	int			indexNO = flame->GetSpecies()->FindSpecies("NO");
+	Double		molecWeightNO = flame->GetSpecies()->GetMolarMass()->vec[indexNO];
+	Double		reacRate;
+	Double		sumIIIbPos = 0.0;
+
+	for ( k = 0; k < nGridPoints; ++k ) {
+		w = w_mat[k];
+		
+		// IIIb
+		reacRate = - w[rN24xf] + w[rN24xb] - w[rN24y] + w[rN47f] - w[rN47b];
+		if ( reacRate > 0 ) {
+			sumIIIbPos += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+	}
+	return 2.0 * sumIIIbPos;
+}
+
+Double T1DReaction::ComputeEIReburnNO( T1DFlamePtr flame )
+{
+	TNewtonPtr	bt = flame->GetSolver()->bt;
+	int			k;
+	TGridPtr	grid = bt->GetGrid()->GetCurrentGrid();
+	Double		*x = grid->GetX()->vec;
+	int			nGridPoints = bt->GetCurrentGridPoints();
+	Double		**w_mat = GetReactionRate()->mat;
+	Double		*w;
+	int			indexNO = flame->GetSpecies()->FindSpecies("NO");
+	Double		molecWeightNO = flame->GetSpecies()->GetMolarMass()->vec[indexNO];
+	Double		reacRate;
+	Double		sumINeg = 0.0;
+	Double		sumIIaNeg = 0.0;
+	Double		sumIIIaNeg = 0.0;
+	Double		sumVbPos = 0.0;
+
+	for ( k = 0; k < nGridPoints; ++k ) {
+		w = w_mat[k];
+
+		// I
+		reacRate = - w[rN37f] + w[rN37b];
+		if ( reacRate < 0 ) {
+			sumINeg += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+		
+		// IIa
+		reacRate = w[rN110f] - w[rN110b];
+		if ( reacRate < 0 ) {
+			sumIIaNeg += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+		
+		// IIIa
+		reacRate = w[rN40f] - w[rN40b] - w[rN45f] + w[rN45b] - w[rN46yf] + w[rN46yb]
+				 - w[rN49f] + w[rN49b];
+		if ( reacRate < 0 ) {
+			sumIIIaNeg += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+		
+		// Vb
+		reacRate = w[rN13] + w[rN14f] - w[rN14b] + w[rN25f] - w[rN25b];
+		if ( reacRate > 0 ) {
+			sumVbPos += molecWeightNO * reacRate * 0.5 * ( x[k+1] - x[k-1] );
+		}
+	}
+	return -2.0 * sumINeg - 2.0 * sumIIaNeg - 2.0 * sumIIIaNeg + 2.0 * sumVbPos;
+}
+#endif

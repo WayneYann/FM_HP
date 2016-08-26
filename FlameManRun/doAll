@@ -1,0 +1,97 @@
+#!/bin/tcsh
+
+cd Diff/Steady/H2
+echo "*** do Diff/Steady/H2 H2.mixfrac.in" >&! $FlameManPath/FlameManRun/outAll
+FlameMaster -i H2.mixfrac.in >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Steady/H2 H2.count.in" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster -i H2.count.in >>& $FlameManPath/FlameManRun/outAll
+
+cd ../CH4
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Steady/CH4" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Steady/CH4 FlameMasterDown.input" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster -i FlameMasterDown.input >>& $FlameManPath/FlameManRun/outAll
+
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Steady/CH4 FlameManContRad.in" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster -i FlameManContRad.in >>& $FlameManPath/FlameManRun/outAll
+
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Steady/CH4 Unsteady" >>& $FlameManPath/outAll
+FlameMaster -i FMUnsteady.input >>& $FlameManPath/outAll
+
+cd ../C3H8
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Steady/C3H8" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster -i Propan >>& $FlameManPath/FlameManRun/outAll
+
+cd ../../SteadyPlugFlow
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/SteadyPlugFlow" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+cd ../Unsteady/H2
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Unsteady/H2" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+cd ../nHeptane
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Diff/Unsteady/nHeptane" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+cd ../../../Prem/Unstretched/CH4
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Prem/Unstretched/CH4" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+cd ../../0D/CH4
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Prem/0D/CH4" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+cd ../../0D/H2
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Prem/0D/H2" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+cd ../../0D/nHeptane
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo "*** do Prem/0D/nHeptane" >>& $FlameManPath/FlameManRun/outAll
+FlameMaster >>& $FlameManPath/FlameManRun/outAll
+
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo >>& $FlameManPath/FlameManRun/outAll
+echo 'done' >>& $FlameManPath/FlameManRun/outAll
+

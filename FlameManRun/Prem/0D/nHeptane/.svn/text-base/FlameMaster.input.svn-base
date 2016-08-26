@@ -1,0 +1,78 @@
+############
+# Numerics #
+############
+
+RelTol = 1.0e-5
+AbsTol = 1.0e-9
+
+TStart = 0.0
+TEnd = 1.0e0
+
+########################
+# Sensitivity Analysis #
+########################
+
+#SensAnalReac is TRUE
+#SensAnalSpec is TRUE
+
+#FirstSensRate = 5
+
+SensMax is TRUE
+#SensFinal is TRUE
+
+#SensObjAll is TRUE
+SensObj is OH
+SensObj is H
+
+SensAnalFac = 2.0
+
+#######
+# I/O #
+#######
+
+#AdditionalOutput is TRUE
+#WriteEverySolution is TRUE
+#PrintMolarFractions is TRUE
+
+OutputPath is ./Output
+NOutputs = 50
+
+#############
+# Chemistry #
+#############
+
+MechanismFile is nHeptane.allstarnew_oks.pre
+globalReaction is n-C7H16 + 11O2 == 8H2O + 7CO2;
+
+fuel is N-C7H16
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+Flame is Isochor Homo Reactor
+#Flame is Isobar Homo Reactor
+
+#phi = 0.5
+phi = 1.0
+phi = 2.0
+
+Pressure = 13e5
+#Pressure = 40e5
+
+#######################
+# Boundary conditions #
+#######################
+
+ContInc = -0.1
+ContType is Temperature
+ContBound = 0.7
+
+InitialCond {
+#	t = 1000
+#	t = 0.8
+	t = 1.7
+	X->N2 = 0.79
+	X->O2 = 0.21
+}

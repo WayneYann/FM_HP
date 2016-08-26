@@ -1,0 +1,904 @@
+#define AUTOREDUCTION
+
+#include "FlameMaster.h"
+
+void LinearInterpolate( Double *x_old, Double *y_old, int n_old,
+						Double *x, Double *y, int n_new )
+{
+    int     	k, m;
+
+    for ( k = 0, m = 0; k < n_new; ++k ) {
+		while( m < n_old && x_old[m] < x[k] ) ++m;
+		if ( m >= n_old ) {
+			--m; // linear extrapolation
+//			fprintf( stderr, "#error in linear interpolation\n" );
+		}
+		if ( m == 0 ) {
+			++m; // linear extrapolation
+		}
+		y[k] = y_old[m-1] +
+			( y_old[m] - y_old[m-1] ) *
+			( x[k] - x_old[m-1] ) /
+			( x_old[m] - x_old[m-1] );
+    }
+}
+
+Double InterpolOne( Double x, Double *x_old, Double *y_old, int n_old )
+{
+    int     	m = 0;
+
+	if ( x_old[0] < x_old[n_old-1] ) {
+	while( m < n_old && x_old[m] < x ) ++m;
+	if ( m >= n_old ) {
+		--m; // linear extrapolation
+	}
+	if ( m == 0 ) {
+		++m; // linear extrapolation
+	}
+	return y_old[m-1] +
+		( y_old[m] - y_old[m-1] ) *
+		( x - x_old[m-1] ) /
+		( x_old[m] - x_old[m-1] );
+	}
+	else {
+		m = n_old-1;
+		while( m > 0 && x_old[m] < x ) --m;
+		if ( m == 0 ) {
+			; // linear extrapolation
+		}
+		if ( m == n_old-1 ) {
+			--m; // linear extrapolation
+		}
+		return y_old[m] +
+			( y_old[m+1] - y_old[m] ) *
+			( x - x_old[m] ) /
+			( x_old[m+1] - x_old[m] );
+	}
+}
+
+Double GetXStagnation( int variable, int nGridPoints, Double *x, Double **y )
+{
+	int			k, kBefStag = -1;
+	Double		xStagnation;
+	
+	for ( k = 0; k < nGridPoints-1; ++k ) {
+		if ( y[k][variable] * y[k+1][variable] <= 0.0 ) {
+			kBefStag = k;
+			break;
+		}
+	}
+	
+	if ( kBefStag < 0 ) {
+		cerr << "##warning: can't find stagnation point" << NEWL;
+		return 0.0;
+	}
+	
+	xStagnation = x[kBefStag] + ( x[kBefStag+1] - x[kBefStag] ) 
+						/ ( y[kBefStag+1][variable] - y[kBefStag][variable] ) * y[kBefStag+1][variable];
+	
+	return xStagnation;
+}
+
+
+void FillJacFirstDerivCentral( int nVariable, int nEquation, Double coeff, NodeInfoPtr nodeInfo, Flag sign )
+{
+// fill jacobian with 		coeff * f'   with central differences for f'
+
+	Double	hmhm = nodeInfo->hm * nodeInfo->hm;
+	Double	hh = nodeInfo->h * nodeInfo->h;
+
+	if ( sign == kPositive ) {
+		nodeInfo->a[nVariable][nEquation] += coeff * ( hh - hmhm );
+		if ( !nodeInfo->lastPoint ) {
+			nodeInfo->b[nVariable][nEquation] += coeff * hmhm;
+		}
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable][nEquation] -= coeff * hh;
+		}
+	}
+	else {
+		nodeInfo->a[nVariable][nEquation] -= coeff * ( hh - hmhm );
+		if ( !nodeInfo->lastPoint ) {
+			nodeInfo->b[nVariable][nEquation] -= coeff * hmhm;
+		}
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable][nEquation] += coeff * hh;
+		}
+	}
+}
+
+Double FirstDerivSq( Double yPrev, Double y, Double yNext, Double hm2, Double h2, Double hnenn )
+{
+// returns central differences for		f'
+
+	return ( ( hm2 * ( yNext - y ) + h2 * ( y - yPrev ) ) / hnenn );
+}
+
+Double FirstDeriv( Double yPrev, Double y, Double yNext, Double hm, Double h )
+{
+// returns central differences for		f'
+
+	return ( ( hm * hm * ( yNext - y ) + h * h * ( y - yPrev ) ) / ( h * hm * ( h + hm ) ) );
+}
+
+void FillJacUpWindConvection( int nVariable, int nEquation, NodeInfoPtr nodeInfo, Flag sign )
+{
+	Double	hm = nodeInfo->hm;
+	Double	h = nodeInfo->h;
+
+	if ( sign == kPositive ) {
+		nodeInfo->a[nVariable][nEquation] -= h * ( h + hm );
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->b[nVariable][nEquation] += h * ( h + hm );
+		}
+	}
+	else {
+		nodeInfo->a[nVariable][nEquation] += h * ( h + hm );
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable][nEquation] -= h * ( h + hm );
+		}
+	}
+}
+
+void FillJacFirstDerivUp( int nVariable, int nEquation, NodeInfoPtr nodeInfo, Flag sign )
+{
+	Double	fact = nodeInfo->h * ( nodeInfo->h + nodeInfo->hm );
+
+	if ( sign == kNegative ) {
+		fact *= -1.0;
+	}
+
+	nodeInfo->a[nVariable][nEquation] += fact;
+	if ( !nodeInfo->firstPoint ) {
+		nodeInfo->c[nVariable][nEquation] -= fact;
+	}
+}
+
+void FillJacFirstDerivDown( int nVariable, int nEquation, NodeInfoPtr nodeInfo, Flag sign )
+{
+	Double	fact = nodeInfo->hm * ( nodeInfo->h + nodeInfo->hm );
+
+	if ( sign == kNegative ) {
+		fact *= -1.0;
+	}
+	
+	nodeInfo->a[nVariable][nEquation] -= fact;
+	if ( !nodeInfo->lastPoint ) {
+		nodeInfo->b[nVariable][nEquation] += fact;
+	}
+}
+
+void FillJacNonlinearConvectCentral( int nVariable1, int nVariable2, NodeInfoPtr nodeInfo, Double coeff )
+{
+// fills the jacobian with     coeff * Y1 * dY2/dy
+// it is assumed that 'nVariable1' is the number of Y1 and that Y2 and the
+// current equation have the number 'nVariable2'
+
+	Double	hmhm = nodeInfo->hm * nodeInfo->hm;
+	Double	hh = nodeInfo->h * nodeInfo->h;
+	Double	*yPrev = nodeInfo->yPrev;
+	Double	*y = nodeInfo->y;
+	Double	*yNext = nodeInfo->yNext;
+
+	nodeInfo->a[nVariable1][nVariable2] += coeff * ( hmhm * yNext[nVariable2] + ( hh - hmhm ) * y[nVariable2] - hh * yPrev[nVariable2] );
+	nodeInfo->a[nVariable2][nVariable2] += coeff * ( ( hh - hmhm ) * y[nVariable1] );
+	if ( !nodeInfo->lastPoint ) {
+		nodeInfo->b[nVariable2][nVariable2] += coeff * ( ( hmhm ) * y[nVariable1] );
+	}
+	if ( !nodeInfo->firstPoint ) {
+		nodeInfo->c[nVariable2][nVariable2] -= coeff * ( hh * y[nVariable1] );
+	}
+}
+
+Double NonlinearConvectCentral( Double y1, Double y2Prev, Double y2, Double y2Next, Double hm, Double h )
+{
+	return ( y1 * ( hm * hm * ( y2Next - y2 ) + h * h * ( y2 - y2Prev ) ) / ( h * hm * ( h + hm ) ) );
+}
+
+void FillJacNonlinearConvectUpwind( int nVariable1, int nVariable2, NodeInfoPtr nodeInfo, Double coeff, Flag velocityPositive )
+{
+//	velocityPositive should have the value FALSE, if 'nVariable1' has the negative 
+//	direction of the physical velocity
+
+// fills the jacobian with     coeff * Y1 * dY2/dy
+// it is assumed that 'nVariable1' is the index of variable Y1 
+// and that Y2 and the current equation have the index 'nVariable2'
+
+	Double	hm = nodeInfo->hm;
+	Double	h = nodeInfo->h;
+	Double	*y = nodeInfo->y;
+	Double	*yNext = nodeInfo->yNext;
+	Double	*yPrev = nodeInfo->yPrev;
+
+	if ( ( y[nVariable1] > 0.0 && velocityPositive ) || ( y[nVariable1] < 0.0 && !velocityPositive ) ) {
+		coeff *= h * ( h + hm );
+		nodeInfo->a[nVariable1][nVariable2] += coeff * ( y[nVariable2] - yPrev[nVariable2] );
+		nodeInfo->a[nVariable2][nVariable2] += coeff * y[nVariable1];
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable2][nVariable2] -= coeff * y[nVariable1];
+		}
+	}
+	else {
+		coeff *= hm * ( h + hm );
+		nodeInfo->a[nVariable1][nVariable2] += coeff * ( yNext[nVariable2] - y[nVariable2] );
+		nodeInfo->a[nVariable2][nVariable2] -= coeff * y[nVariable1];
+		if ( !nodeInfo->lastPoint ) {
+			nodeInfo->b[nVariable2][nVariable2] += coeff * y[nVariable1];
+		}
+	}
+}
+
+Double NonlinearConvectUpwind( Double y1, Double y2Prev, Double y2, Double y2Next, Double hm, Double h, Flag velocityPositive )
+{
+//	velocityPositive should have the value FALSE, if 'y1' has the negative 
+//	direction of the physical velocity
+
+// returns     Y1 * dY2/dy
+
+	if ( ( y1 > 0.0 && velocityPositive ) || ( y1 < 0.0 && !velocityPositive ) ) {
+		return ( y1 * ( y2 - y2Prev ) / hm );
+	}
+	else {
+		return ( y1 * ( y2Next - y2 ) / h );
+	}
+}
+
+void FillJacWithDiffusion( int nVariable, int nEquation, Double constCoeff, Double *coeff, NodeInfoPtr nodeInfo, Flag sign )
+{
+// fills the jacobian with     constCoeff * d/dy ( coeff * df/dy)
+
+	Double	coeffPlus = constCoeff * ( coeff[kCurr] + coeff[kNext] );
+	Double	coeffMinus = constCoeff * ( coeff[kPrev] + coeff[kCurr] );
+
+	if ( sign == kPositive ) {
+		coeffPlus *= nodeInfo->hm;
+		coeffMinus *= nodeInfo->h;
+	}
+	else {
+		coeffPlus *= - nodeInfo->hm;
+		coeffMinus *= - nodeInfo->h;
+	}
+
+	nodeInfo->a[nVariable][nEquation] -= ( coeffPlus + coeffMinus );
+	if ( !nodeInfo->lastPoint ) {
+		nodeInfo->b[nVariable][nEquation] += coeffPlus;
+	}
+	if ( !nodeInfo->firstPoint ) {
+		nodeInfo->c[nVariable][nEquation] += coeffMinus;
+	}
+}
+
+void FillJacSecondDerivCentral( int nVariable, int nEquation, Double coeff, NodeInfoPtr nodeInfo, Flag sign )
+{
+// fills the jacobian with     coeff * f''
+
+	if ( sign == kPositive ) {
+		coeff *= 2.0;
+	}
+	else {
+		coeff *= -2.0;
+	}
+
+	Double	hm2Coeff = coeff * nodeInfo->hm;
+	Double	h2Coeff = coeff * nodeInfo->h;
+
+	nodeInfo->a[nVariable][nEquation] -= ( hm2Coeff + h2Coeff );
+	if ( !nodeInfo->lastPoint ) {
+		nodeInfo->b[nVariable][nEquation] += hm2Coeff;
+	}
+	if ( !nodeInfo->firstPoint ) {
+		nodeInfo->c[nVariable][nEquation] += h2Coeff;
+	}
+}
+
+Double FirstDerivLeft( Double yPrev, Double y, Double yNext, Double hm, Double h )
+{
+	Double	hPlushm = h + hm;
+	return ( ( hPlushm * hPlushm * ( y - yPrev ) + hm * hm * ( yPrev - yNext ) ) / ( h * hm * ( h + hm ) ) );
+}
+
+Double FirstDerivUpwind( Double y2, Double y1, Double h )
+{
+	return ( y2 - y1 ) / h;
+}
+
+Double SecondDeriv( Double yPrev, Double y, Double yNext, Double hm, Double h )
+{
+	return ( 2.0 * ( hm * yNext - ( hm + h ) * y + h * yPrev )
+			/ ( h * hm * ( h + hm ) ) );
+}
+
+Double SecondDerivDiffusion( int nVariable, Double *coeff, NodeInfoPtr nodeInfo )
+{
+// returns			d/dy( coeff * df/dy )
+
+	Double	yPrev = nodeInfo->yPrev[nVariable];
+	Double	y = nodeInfo->y[nVariable];
+	Double	yNext = nodeInfo->yNext[nVariable];
+	Double	coeffPlusHm = ( coeff[kCurr] + coeff[kNext] ) * nodeInfo->hm;
+	Double	coeffMinusH = ( coeff[kPrev] + coeff[kCurr] ) * nodeInfo->h;
+	
+	return ( coeffPlusHm * ( yNext - y ) + coeffMinusH * ( yPrev - y ) )
+				/ nodeInfo->hnenn;
+}
+
+Double SecondDerivWeightedDiffusion( int nVariable, Double coeff, NodeInfoPtr nodeInfo )
+{
+	Double	yPrev = nodeInfo->yPrev[nVariable];
+	Double	y = nodeInfo->y[nVariable];
+	Double	yNext = nodeInfo->yNext[nVariable];
+	Double	hm = nodeInfo->hm;
+	Double	h = nodeInfo->h;
+	
+	return ( 2.0 * coeff * ( hm * yNext - ( hm + h ) * y + h * yPrev ) / nodeInfo->hnenn );
+}
+
+Double myPow( Double base, Double expo )
+{
+	return ( base == 0.0 && expo == 0.0 ) ? 1.0 : pow( base, expo );
+}
+
+Double modPow( Double base, int expo )
+{
+	const int	limit = 4;
+	Double		value;
+	
+	if ( expo > limit ) {
+		return pow( base, expo );
+	}
+	else {
+		value = 1.0;
+		while ( expo ) {
+			value *= base;
+			--expo;
+		}
+	}
+	return value;
+}
+
+Double myLog10( Double arg )
+{
+	static Double	small = 1.0e-200;
+	static Double	value = -200.0;
+
+	return ( arg > small ) ? log10( arg ) : value;
+}
+
+Double Signum( Double val )
+{
+	if ( val == 0.0 ) {
+		return 0.0;
+	}
+	else {
+		return val / fabs(val);
+	}
+}
+
+void CopyStringArray( char **dest, char **source, int n )
+{
+	for ( int i = 0; i < n; ++i ) {
+		dest[i] = new char [strlen( source[i] ) + 1];
+		strcpy( dest[i], source[i] );
+	}
+}
+
+Double IntegralFull( int nPoints, Double *x, Double *y )
+{
+// function assumes, that y[0] = 0, y[L] = 0;
+
+	int			k;
+	Double		sum;
+
+	sum = y[0] * ( x[1] - x[0] ) + y[nPoints-1] * ( x[nPoints-1] - x[nPoints-2] );
+	for ( k = 1; k < nPoints-1; ++k ) {
+		sum += y[k] * ( x[k+1] - x[k-1] );
+	}
+	
+	return 0.5 * sum;
+}
+
+Double Integral( int nPoints, Double *x, Double *y )
+{
+// function assumes, that y[0] = 0, y[L] = 0;
+
+	int			k;
+	Double		sum;
+
+	sum = 0.0;  // y[0] = 0, y[L] = 0
+	for ( k = 0; k < nPoints; ++k ) {
+		sum += y[k] * ( x[k+1] - x[k-1] );
+	}
+	
+	return 0.5 * sum;
+}
+
+void SaveArray( Double **matrix, int rows, int cols, int partition, Double *x, 
+		ConstStringArray titles, char *name )
+{
+	FILE			*fp = NULL;
+	char			*filename = new char[strlen( name ) + 8];
+	//PP
+#ifdef AUTOREDUCTION
+	const int		maxCols = 50000; // Everything in same file
+#else
+	const int		maxCols = 255;
+#endif
+	//PP
+	int				nfiles = cols / ( maxCols + 1 ) + 1;
+	int				nmod = cols - maxCols * ( nfiles - 1 );
+	int				f, j;					// file number
+	int				jfile;			// column
+	int				i;					// row
+	
+	
+	for ( f = 0; f < nfiles; ++f ) {
+		if ( nfiles == 1 ) {
+			sprintf( filename, "%s.dout", name );
+		}
+		else {
+			sprintf( filename, "%s_%i.dout", name, f );
+		}
+		if ( !( fp = fopen( filename, "w") ) ) { 
+			cerr << "#warning: unable to open file " << filename << NEWL;
+			exit(2);
+		}
+		jfile = ( f == nfiles-1 ) ? nmod : maxCols;
+		
+		// header for KG
+		fputs( "*\nx", fp );
+		for ( j = f * maxCols; j < f * maxCols + jfile; ++j ) fprintf( fp, "\t%s", titles[j] );
+		fputc( '\n', fp );
+
+		// data
+		for ( i = 0; i < rows; ++i ) {
+			fprintf( fp, "%g", x[i] );
+			for ( j = f * maxCols; j < f * maxCols + jfile; ++j ) {
+				if ( partition == kRowPointers ) {
+					fprintf( fp, "\t%g", matrix[i][j] );
+				}
+				else {
+					fprintf( fp, "\t%g", matrix[j][i] );
+				}
+			}
+			fputc( '\n', fp );
+		}
+	fclose( fp );
+	}
+
+	// CleanUp
+	delete filename;
+}
+
+int LocationOfAbsMax( int len, Double *vec )
+{
+	int		maxPoint = 0;	
+	Double	high = fabs( vec[0] );
+	
+	for ( int k = 1; k < len; ++k ) {
+		if ( fabs( vec[k] ) > high ) {
+			high = fabs( vec[k] );
+			maxPoint = k;
+		}
+	}
+	
+	return maxPoint;
+}
+
+int LocationOfMin( int len, Double *vec )
+{
+	int		minPoint = 0;	
+	Double	low = vec[0];
+	
+	for ( int k = 1; k < len; ++k ) {
+		if ( vec[k] < low ) {
+			low = vec[k];
+			minPoint = k;
+		}
+	}
+	
+	return minPoint;
+}
+
+int LocationOfMax( int len, Double *vec )
+{
+	int		maxPoint = 0;	
+	Double	high = vec[0];
+	
+	for ( int k = 1; k < len; ++k ) {
+		if ( vec[k] > high ) {
+			high = vec[k];
+			maxPoint = k;
+		}
+	}
+	
+	return maxPoint;
+}
+
+int LocationOfMin( int len, Double *vec, int offset )
+{
+	int		minPoint = 0;	
+	int		off;
+	Double	low = vec[0];
+	
+	for ( int k = 1; k < len; ++k ) {
+		if ( vec[off = k*offset] < low ) {
+			low = vec[off];
+			minPoint = k;
+		}
+	}
+	
+	return minPoint;
+}
+
+int LocationOfMax( int len, Double *vec, int offset )
+{
+	int		maxPoint = 0;	
+	int		off;
+	Double	high = vec[0];
+	
+	for ( int k = 1; k < len; ++k ) {
+		if ( vec[off = k*offset] > high ) {
+			high = vec[off];
+			maxPoint = k;
+		}
+	}
+	
+	return maxPoint;
+}
+
+int LocationOfMaxSlope( Double *vec, Double *x, int len )
+{
+	int	maxPoint = 1;
+	Double slope;
+	Double maxSlope = fabs( vec[1] - vec[0] ) / ( x[1] - x[0] );
+	for ( int i = 2; i < len; ++i ) {
+		if ( ( slope = fabs( vec[i] - vec[i-1] ) / ( x[i] - x[i-1] ) ) > maxSlope ) {
+			maxSlope = slope;
+			maxPoint = i;
+		}
+	}
+	return maxPoint;
+}
+
+Double	SolveQuadratic( Double a, Double b, Double c )
+{
+	// solves the quadratic equation a x^2 + b x - c = 0
+	
+	if ( !a ) {
+		return c / b;
+	}
+
+	b /= a;
+	c /= a;
+	
+	Double	rad = 0.25 * b * b + c;
+	if ( rad >= 0.0 ) {
+		rad = sqrt( rad ) + 0.5 * b;
+		if ( rad != 0.0 ) {
+			return c / rad;
+		}
+		else {
+			return -0.5 * b + sqrt( 0.25 * b * b + c );
+		}
+	}
+	else {
+		return 0.0;
+	}
+
+}
+
+void InverseMatrix( int n, Double **a, Double **inv, int *index, Double *col )
+{
+	int 	i, j;
+	Double	d;
+	
+	ludcmp( a, n, index, &d, col );
+	
+	for ( j = 0; j < n; ++j ) {
+		Clear1DArray( col, n );
+		col[j] = 1.0;
+		lubksb( a, n, index, col );
+		for ( i = 0; i < n; ++i ) inv[i][j] = col[i];
+	}
+}
+
+#ifndef ZEROD
+void T1DFlame::FillJacDiffusion( int nVariable, int nEquation, Double constCoeff, Double *diffCoeff, NodeInfoPtr nodeInfo, Flag sign )
+{
+// fills the jacobian with     constCoeff * d/dy ( rho * diffCoeff * df/dy)
+
+	Double	*density = fFlameNode->mixDensity;
+	Double	diffPlus = constCoeff * ( density[kCurr] * diffCoeff[kCurr] + density[kNext] * diffCoeff[kNext] );
+	Double	diffMinus = constCoeff * ( density[kPrev] * diffCoeff[kPrev] + density[kCurr] * diffCoeff[kCurr] );
+	Double	hm = nodeInfo->hm;
+	Double	h = nodeInfo->h;
+
+	if ( sign == kPositive ) {
+		nodeInfo->a[nVariable][nEquation] -= ( hm * diffPlus + h * diffMinus );
+		if ( !nodeInfo->lastPoint ) {
+			nodeInfo->b[nVariable][nEquation] += hm * diffPlus;
+		}
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable][nEquation] += h * diffMinus;
+		}
+	}
+	else {
+		nodeInfo->a[nVariable][nEquation] += ( hm * diffPlus + h * diffMinus );
+		if ( !nodeInfo->lastPoint ) {
+			nodeInfo->b[nVariable][nEquation] -= hm * diffPlus;
+		}
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable][nEquation] -= h * diffMinus;
+		}
+	}
+}
+
+Double T1DFlame::StandardDiffusion( int nVariable, Double *diffCoeff, NodeInfoPtr nodeInfo )
+{
+	// returns finite difference approximation of   d/dy( rho * diffCoeff * df/fy )
+
+	Double	yPrev = nodeInfo->yPrev[nVariable];
+	Double	y = nodeInfo->y[nVariable];
+	Double	yNext = nodeInfo->yNext[nVariable];
+	Double	*density = fFlameNode->mixDensity;
+	Double	diffPlus = density[kCurr] * diffCoeff[kCurr] + density[kNext] * diffCoeff[kNext];
+	Double	diffMinus = density[kPrev] * diffCoeff[kPrev] + density[kCurr] * diffCoeff[kCurr];
+	Double	hm = nodeInfo->hm;
+	Double	h = nodeInfo->h;
+	
+	return ( ( diffPlus * hm * ( yNext - y ) + diffMinus * h * ( yPrev - y ) ) 
+				/ nodeInfo->hnenn );
+}
+
+void T1DFlame::FillJacMixFracDiffusion( int nVariable, int nEquation, Double constCoeff, NodeInfoPtr nodeInfo, Flag sign )
+{
+//	fill jacobian with  constCoeff * d/dy( rho * lambda / cp * dZ/dy )
+
+	Double	*lambda = fFlameNode->mixConductivity;
+	Double	*rho = fFlameNode->mixDensity;
+	Double	*cp = fFlameNode->mixHeatCapacity;
+	Double	diffPlus = constCoeff * ( rho[kCurr] * lambda[kCurr] / cp[kCurr]
+					+ rho[kNext] * lambda[kNext] / cp[kNext] );
+	Double	diffMinus = constCoeff * ( rho[kPrev] * lambda[kPrev] / cp[kPrev]
+					+ rho[kCurr] * lambda[kCurr] / cp[kCurr] );
+	Double	hm = nodeInfo->hm;
+	Double	h = nodeInfo->h;
+
+	if ( sign == kPositive ) {
+		nodeInfo->a[nVariable][nEquation] -= ( hm * diffPlus + h * diffMinus );
+		if ( !nodeInfo->lastPoint ) {
+			nodeInfo->b[nVariable][nEquation] += hm * diffPlus;
+		}
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable][nEquation] += h * diffMinus;
+		}
+	}
+	else {
+		nodeInfo->a[nVariable][nEquation] += ( hm * diffPlus + h * diffMinus );
+		if ( !nodeInfo->lastPoint ) {
+			nodeInfo->b[nVariable][nEquation] -= hm * diffPlus;
+		}
+		if ( !nodeInfo->firstPoint ) {
+			nodeInfo->c[nVariable][nEquation] -= h * diffMinus;
+		}
+	}
+}
+
+Double T1DFlame::SecondDerivMixFracDiffusion( int nVariable, NodeInfoPtr nodeInfo )
+{
+	Double	*lambda = fFlameNode->mixConductivity;
+	Double	*rho = fFlameNode->mixDensity;
+	Double	*cp = fFlameNode->mixHeatCapacity;
+	Double	diffPlus =  rho[kCurr] * lambda[kCurr] / cp[kCurr]
+					+ rho[kNext] * lambda[kNext] / cp[kNext];
+	Double	diffMinus = rho[kPrev] * lambda[kPrev] / cp[kPrev]
+					+ rho[kCurr] * lambda[kCurr] / cp[kCurr];
+	Double	hm = nodeInfo->hm;
+	Double	h = nodeInfo->h;
+	Double	yPrev = nodeInfo->yPrev[nVariable];
+	Double	y = nodeInfo->y[nVariable];
+	Double	yNext = nodeInfo->yNext[nVariable];
+	
+	return ( diffPlus * hm * yNext - ( diffPlus * hm + diffMinus * h ) * y + diffMinus * h * yPrev ) 
+				/ ( h * hm * ( h + hm ) );
+}
+#endif
+
+Double LambdaOverCp ( Double temp )
+{
+	if ( temp < 0 ) {
+		fprintf( stderr, "#error: LamdaOverCp called with a negative temperature %g K\n", temp );
+		exit( 2 );
+	}
+	return ( 2.58e-5 * pow( temp / 298, 0.7 ) );
+}
+
+Double TrapIntegrate( int nG, Double *f, Double *x )
+{
+	int	i;
+	
+	Double sum;
+	sum = 0.0;
+	
+	for ( i = 1; i < nG; ++i ) {
+		sum += 0.5 * ( f[i] + f[i-1] ) * ( x[i] - x[i-1] );
+	}
+
+	return sum;
+}
+
+Double *TrapIntegrate( int nG, Double *f, Double *x, Double *res )
+{
+	int	i;
+	
+	res[0] = 0.0;
+	
+	for ( i = 1; i < nG; ++i ) {
+		res[i] = res[i-1] + 0.5 * ( f[i] + f[i-1] ) * ( x[i] - x[i-1] );
+	}
+
+	return res;
+}
+
+void DisposeFToCMat( MatrixPtr mat )
+{
+	delete mat->mat;
+	delete mat;
+}
+
+char *FortranToCChar( char *a, int nChars )
+{
+// returns pointer to a fortran allocated character array of size 'nChars'
+
+	char	*newA;
+	char	*buffer = new char[nChars+1];
+	int		strlenght;
+	
+	buffer[nChars] = '\0';
+	strncpy( buffer, a, nChars );
+	strlenght = strcspn( buffer, " " );
+	strlenght = maxint( nChars, strlenght );
+	newA = new char[strlenght+1];
+	strncpy( newA, buffer, strlenght );
+	newA[strlenght] = '\0';
+
+	delete buffer;
+	return newA;
+}
+
+char **FortranToCCharArray( char *a, int nChars, int len )
+{
+// returns pointer to a fortran allocated character array 
+// with 'len' items of nChars 'nChars'
+
+	char	**newA = new char*[len];
+	char	*buffer = new char[nChars+1];
+	int		strlenght;
+	
+	buffer[nChars] = '\0';
+	for ( int i = 0; i < len; ++i ) {
+		strncpy( buffer, &a[i*nChars], nChars );
+		strlenght = strcspn( buffer, " " );
+		newA[i] = new char[strlenght+1];
+		strncpy( newA[i], buffer, strlenght );
+		newA[i][strlenght] = '\0';
+	}
+
+	delete buffer;
+	return newA;
+}
+
+void DisposeFToCCharArray( char **newA, int len )
+{
+	for ( int i = 0; i < len; ++i ) {
+		delete newA[i];
+	}
+	delete newA;
+}
+
+void CToFortranCharArray( char *aF, char **aC, int nChars, int len )
+{
+// returns pointer to a fortran allocated character array aF
+// with 'len' items of nChars 'nChars'
+
+	char	*buffer = new char[nChars+1];
+	char	format[128];
+	sprintf( format, "%%-%ds", nChars );
+
+	for ( int i = 0; i < len; ++i ) {
+		sprintf( buffer, format, aC[i] );
+		strncpy( &aF[i*nChars], buffer, nChars );
+	}
+
+	delete buffer;
+}
+
+void CToFortranChar( char *aF, char *aC, int nChars )
+{
+// returns pointer to a fortran allocated strings aF
+// of nChars 'nChars'
+
+	char	*buffer = new char[nChars+1];
+	char	format[128];
+	sprintf( format, "%%-%ds", nChars );
+
+	sprintf( buffer, format, aC );
+	strncpy( aF, buffer, nChars );
+
+	delete buffer;
+}
+
+MatrixPtr FortranToCMat( Double *x, int rows, int physRows, int cols, int physCols )
+{
+// returns MatrixPtr to a fortran allocated 2-D field of length x(physRows,physCols)
+
+//	int			size = physRows * physCols * sizeof( Double );
+	MatrixPtr	newX = new Matrix;
+	newX->mat = new Double*[physCols];
+	
+	newX->rows = rows;
+	newX->cols = cols;
+	newX->phys_rows = physRows;
+	newX->phys_cols = physCols;
+	newX->partition = kColumnPointers;
+	
+	for ( int i = 0; i < newX->phys_cols; ++i ) {
+//		fprintf( stderr, "x = %g\n", x[i*physRows] );
+		newX->mat[i] = &x[i*physRows];
+	}
+
+	return newX;
+}
+
+Double DotProd( int n, const Double *r, int inc_r, const Double *c, int inc_c )
+{
+	const int	m = n % 4;
+	int			i;
+	Double		sum = 0.0;
+	
+	if ( m ) {
+		for ( i = 0; i < m; ++i ) {
+			sum += *r * *c++;	r += inc_r;
+		}
+		if ( n < 4 ) return sum;
+	}
+	n /= 4;
+	for ( i = 0; i < n; ++i ) {
+		sum += *r * *c;	r += inc_r;	c += inc_c;
+		sum += *r * *c;	r += inc_r;	c += inc_c;
+		sum += *r * *c;	r += inc_r;	c += inc_c;
+		sum += *r * *c;	r += inc_r;	c += inc_c;
+	}
+	return sum;
+}
+
+char *MyDataFile( const char* name )
+{
+	char *path = NULL;
+	char *fullName = NULL;
+	
+	path = getenv( "myData" );
+	if ( path ) {
+		if ( path[strlen( path )-1] == '/' ) {
+			fullName = (char *)malloc( strlen(path) + strlen(name) + 1 );
+			if ( fullName ) {
+				strcpy( fullName, path );
+				strcat( fullName, name );
+			}
+		}
+		else {
+			fullName = (char *)malloc( strlen(path) + strlen(name) + 2 );
+			if ( fullName ) {
+				strcpy( fullName, path );
+				strcat( fullName, "/" );
+				strcat( fullName, name );
+			}
+		}
+	}
+	else {
+		fullName = (char *)malloc( strlen(name) + 1 );
+		strcpy( fullName, name );
+	}
+	
+	return fullName;
+}

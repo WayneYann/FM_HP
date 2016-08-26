@@ -1,0 +1,170 @@
+This directory has two different cases for hydrogen diffusion flames. One for a
+counterflow diffusion flame in similarity coordinate, and one for the solution
+of the flamelet equations. These are started with two different input files.
+
+
+Counterflow diffusion flame:
+
+This case is started with
+
+FlameMaster -i H2.count.in
+
+The main result of this simulation is the flamelet file
+OutCount/H2_p01_0a00100_0tf0300to0300. The format of the flamelet files is
+specified in the last chapter of the 'Reduced Kinetic Mechanisms ... book' by
+Peters and Rogg. However, this format cannot be printed easily. The conversion
+to a tab separated list can be done with the ListTool program. An alias LT is
+already defined. Hence the command
+
+LT OutCount/H2_p01_0a00100_0tf0300to0300
+
+will result in a file OutCount/H2_p01_0a00100_0tf0300to0300.kg, which is a tab
+separated text file. ListTool takes more than one file on the command line at
+the same time, for instance LT OutCount/H2*300 would convert all matched files.
+ListTool can also be used to collect useful data from a series of flamelet
+files. For example
+
+LT -r <file.out> <flamelet file list>
+
+creates a file with the maxima of all the vectors appearing in the flamelet
+files. The scalar quantities from the header of the file can be retrieved with
+the -s <symbolfile> option, where <symbolfile> includes the names of all the
+names of quantities that are of interest in one column. A good combination is
+
+LT -s <symbolfile> -r <file.out> <flamelet file list>
+
+(If these options are used, the generation of the tab separated list files is
+omitted.) An example for a symbolfile is given in
+~/FlameMaster/FlameManRun/Prem/Unstreched/CH4. For more options check LT -h.
+
+
+With the options
+
+SensAnal is TRUE
+SensObj is T
+SensObj is OH
+
+in the input file, sensitivity coefficients will be computed for temperature
+and OH mass fraction. All other quantities, which are part of the solution,
+could be added in the same way. The results are in the output directory.
+
+
+After running this case once, you could try to restart from the result that was
+just produced:
+
+FlameMaster -i H2.count.in -s OutCount/H2_p01_0a00100_0tf0300to0300
+
+You could also run this at a different pressure (specify in bar)
+
+FlameMaster -i H2.count.in -s OutCount/H2_p01_0a00100_0tf0300to0300 -p 1.5
+
+or with the -P option (Parameter) at a different strainrate
+
+FlameMaster -i H2.count.in -s OutCount/H2_p01_0a00100_0tf0300to0300 -P 200
+
+These values can of course also be changed in the input file, however, command
+line options overrule the input file.
+
+
+
+
+
+
+Flamelet equations in mixture fraction space:
+
+This case is started with
+
+FlameMaster -i H2.mixfrac.in
+
+Note that there is no scalar dissipation rate specified in the input file. In
+this case, or if the scalar dissipation rate is negative, the value will be
+taken from the startprofiles file.
+
+Similarly here, the job can also be run at different scalar dissipation rate
+using the -P option. Rerunning this job with the just produced solution as
+start profile
+
+FlameMaster -i H2.mixfrac.in -s OutMixFrac/H2_p01_0chi1.73414tf0300to0300
+
+provides after reading the startprofiles file the message:
+
+#warning: maximum error in mass conservation at gridpoint no. 40: sumYi =
+0.953109
+
+showing that the solution has a substantial mass error. The reason is that the
+flamelet equations are solved with non-unity Lewis numbers, but without full
+transport, the way it is described in Pitsch, Peters, Comb. Flame, 114, pp.
+26--40, 1998.
+
+The case can also be run with unity Lewis numbers by uncommenting the line
+
+LewisNumberFile is LewisNumberOne
+
+in the input file. The option specifies a file that specifies Lewis numbers for
+the chemical species. For species that don't appear Le = 1 is used. For the
+present case, the file LewisNumberOne does not exist, hence all Le are unity.
+After running this case once, the solution should not have a mass error
+anymore. Running for the second time shows that the warning message does not
+appear anymore.
+
+To run a series of scalar dissipation rates or pressures, multiple lines of the
+respective entry can be specified in the input file. In case of running such a
+series and a convergent solution cannot be found, the solver goes to
+intermediate values of these parameters and continues after a convergent
+solution can be found.
+
+For running series of parameters, the settings
+
+MaxIter = 25 DeltaNewGrid = 15
+
+have been found to be useful.
+
+A question that is often being asked is how to run a case for a fuel, for which
+no startprofiles file is available. Typically, this is done by running a case
+for a different fuel and then replace the fuel gradually by the new fuel. This
+can be tested here for the transition from H2 to CH4.
+
+First we need a solution with a mechanism that has both fuels, in this case CH4
+and H2. This can be achieved by running with the mechanism CH4.72.pre. All the
+preprocessed mechanism files are in ~/FlameMaster/FlameManData
+
+FlameMaster -i H2.mixfrac.in -r $myData/CH4.72.pre
+
+Then, in the following computations, H2 is gradually being replaced by CH4 as a
+fuel. This can be done automatically by using the following options in the
+input file:
+
+ToSpecies is CH4 
+FromSpecies is H2 
+ContInc = 0.02 
+ContSide is right 
+ContBound = 1.0
+
+The solution will always be converged and continued with 2 percent more CH4 on
+the fuel side. The results will always be saved. The final result will have
+only CH4 on the fuel side. Finally an input file for CH4 should be produced by
+copying H2.mixfrac.in to a different name and replacing the fuel specific
+lines:
+
+fuel is CH4 
+MechanismFile is CH4.72.pre
+globalReaction is CH4 + 2 O2 == CO2 + 2 H2O;
+
+and
+
+Fuel Side { 
+	dirichlet { 
+		t = 300.0 
+		y->CH4 = 1.0 
+	} 
+}
+
+The new global reaction will lead to a different stoichiometric mixture
+fraction and hence different dissipation rate distribution if chi_st is
+specified. The case should be run one more time with the last solution from the
+previous run as startprofiles file:
+
+FlameMaster -i CH4.mixfrac.in -s OutMixfrac/H2_p01_0chi1.73414tf0300to0300
+
+The resulting file, OutMixfrac/CH4_p01_0chi1.73414tf0300to0300 can now be used
+as input for further methane calculations.

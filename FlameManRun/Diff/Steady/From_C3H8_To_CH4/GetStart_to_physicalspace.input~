@@ -1,0 +1,104 @@
+############
+# Numerics #
+############
+
+#### Newton solver ####
+
+#TimeDepFlag = TRUE
+DeltaTStart = 1.0e-8
+
+DampFlag = TRUE
+LambdaMin = 1.0e-2
+
+UseNumericalJac is TRUE
+#UseModifiedNewton = TRUE
+
+MaxIter = 10000
+TolRes = 1.0e-12
+TolDy = 1.0e-4
+
+#### grid ####
+
+DeltaNewGrid = 100
+OneSoluOneGrid is TRUE
+initialgridpoints = 20
+maxgridpoints = 139
+q = -0.25
+R = 30
+
+#######
+# I/O #
+#######
+
+#WriteRes is TRUE
+#WriteFullRes is TRUE
+WriteEverySolution is TRUE
+
+#CAinFile = ./CA.in
+
+OutputPath is ./Out_GetS_CH4
+StartProfilesFile is ./Out_GetS_CH4/Lib_Chi00001_T0298t00009.tout
+
+#############
+# Chemistry #
+#############
+
+MechanismFile is C3H8.82.pre
+globalReaction is CH4 + 2O2 == CO2 + 2H2O;
+
+fuel is CH4
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+#Flame is CounterFlowDiffusion
+Flame is Counterflow Diffusion in Mixture Fraction Space
+#Flame is Transient Flamelet
+
+#ThermoDiffusion is TRUE
+#ComputeWithRadiation is TRUE
+
+Scalar DissRate = 1
+#StrainRate = 100
+#StrainRate = 150
+#StrainRate = 180
+#StrainRate = 210
+#StrainRate = 240
+#pressure = 1.0e5
+
+#######################
+# Boundary conditions #
+#######################
+
+#ContInc = -5.0
+#ContSide is bothSides
+#ContType is Temperature
+#ContBound = 298.0
+
+#ContSteps = 1000
+#ContinFlag is True
+#ToSpecies is H2
+#FromSpecies is C3H8
+#ContSide is right
+#ContType is Temperature
+#ContInc = 0.02
+#ContBound = 1.0
+
+
+Fuel Side {
+	dirichlet {
+		t = 300.0
+		y->CH4 = 1.0
+#		y->C3H8 = 1.0
+	}
+}
+
+Oxidizer Side {
+	dirichlet {
+		t = 300.0
+		x->o2 = 0.21
+		x->n2 = 0.79
+}
+}

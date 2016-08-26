@@ -1,0 +1,393 @@
+
+The List 'Species' has 9 Items.
+Used species are:
+N2 is species no. 0
+	Composition: 2 N	0 O	0 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 2.926640e+00  	1.487977e-03  	-5.684760e-07 	1.009704e-10  	-6.753351e-15 	-9.227977e+02 	5.980528e+00  	3.298677e+00  	1.408240e-03  	-3.963222e-06 	5.641515e-09  	-2.444854e-12 	-1.020900e+03 	3.950372e+00  
+	M = 2.801400e+01  	k/eps = 1.025326e-02  	sigma = 3.621000e+00  	muCoeff = 1.077526e-06  
+	constant d_Coefficients are: 3.837287e-04  	3.888962e-04  	2.374326e-03  	5.704227e-04  	5.814957e-04  	1.283720e-03  	5.868125e-04  	3.861145e-04  	3.834791e-04  	
+	constant omega_Coefficients are: 1.025326e-02  	9.770769e-03  	8.409049e-03  	1.132103e-02  	1.132103e-02  	1.642628e-02  	4.232345e-03  	9.770769e-03  	9.770769e-03  	
+
+O2 is species no. 1
+	Composition: 0 N	2 O	0 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 3.697578e+00  	6.135197e-04  	-1.258842e-07 	1.775281e-11  	-1.136435e-15 	-1.233930e+03 	3.189165e+00  	3.212936e+00  	1.127486e-03  	-5.756150e-07 	1.313877e-09  	-8.768554e-13 	-1.005249e+03 	6.034737e+00  
+	M = 3.200000e+01  	k/eps = 9.310987e-03  	sigma = 3.458000e+00  	muCoeff = 1.262765e-06  
+	constant d_Coefficients are: 3.888962e-04  	3.936805e-04  	2.511483e-03  	5.864653e-04  	5.984062e-04  	1.344517e-03  	6.035163e-04  	3.906634e-04  	3.878036e-04  	
+	constant omega_Coefficients are: 9.770769e-03  	9.310987e-03  	8.013345e-03  	1.078830e-02  	1.078830e-02  	1.565331e-02  	4.033184e-03  	9.310987e-03  	9.310987e-03  	
+
+H is species no. 2
+	Composition: 0 N	0 O	1 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 2.500000e+00  	0.000000e+00  	0.000000e+00  	0.000000e+00  	0.000000e+00  	2.547162e+04  	-4.601176e-01 	2.500000e+00  	0.000000e+00  	0.000000e+00  	0.000000e+00  	0.000000e+00  	2.547162e+04  	-4.601176e-01 
+	M = 1.008000e+00  	k/eps = 6.896552e-03  	sigma = 2.050000e+00  	muCoeff = 6.377052e-07  
+	constant d_Coefficients are: 2.374326e-03  	2.511483e-03  	6.311475e-03  	3.351226e-03  	3.357127e-03  	3.719773e-03  	3.557672e-03  	2.510312e-03  	2.509210e-03  	
+	constant omega_Coefficients are: 8.409049e-03  	8.013345e-03  	6.896552e-03  	9.284767e-03  	9.284767e-03  	1.347176e-02  	3.471092e-03  	8.013345e-03  	8.013345e-03  	
+
+OH is species no. 3
+	Composition: 0 N	1 O	1 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 2.882730e+00  	1.013974e-03  	-2.276877e-07 	2.174683e-11  	-5.126305e-16 	3.886888e+03  	5.595712e+00  	3.637266e+00  	1.850910e-04  	-1.676165e-06 	2.387202e-09  	-8.431442e-13 	3.606781e+03  	1.358861e+00  
+	M = 1.700800e+01  	k/eps = 1.250000e-02  	sigma = 2.750000e+00  	muCoeff = 1.455656e-06  
+	constant d_Coefficients are: 5.704227e-04  	5.864653e-04  	3.351226e-03  	8.538407e-04  	8.671844e-04  	1.745126e-03  	8.880184e-04  	5.833493e-04  	5.804027e-04  	
+	constant omega_Coefficients are: 1.132103e-02  	1.078830e-02  	9.284767e-03  	1.250000e-02  	1.250000e-02  	1.813691e-02  	4.673101e-03  	1.078830e-02  	1.078830e-02  	
+
+O is species no. 4
+	Composition: 0 N	1 O	0 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 2.542059e+00  	-2.755061e-05 	-3.102803e-09 	4.551067e-12  	-4.368051e-16 	2.923080e+04  	4.920308e+00  	2.946428e+00  	-1.638167e-03 	2.421031e-06  	-1.602843e-09 	3.890696e-13  	2.914764e+04  	2.963995e+00  
+	M = 1.600000e+01  	k/eps = 1.250000e-02  	sigma = 2.750000e+00  	muCoeff = 1.411861e-06  
+	constant d_Coefficients are: 5.814957e-04  	5.984062e-04  	3.357127e-03  	8.671844e-04  	8.803259e-04  	1.750942e-03  	9.022925e-04  	5.953527e-04  	5.924658e-04  	
+	constant omega_Coefficients are: 1.132103e-02  	1.078830e-02  	9.284767e-03  	1.250000e-02  	1.250000e-02  	1.813691e-02  	4.673101e-03  	1.078830e-02  	1.078830e-02  	
+
+H2 is species no. 5
+	Composition: 0 N	0 O	2 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 2.991423e+00  	7.000644e-04  	-5.633828e-08 	-9.231578e-12 	1.582752e-15  	-8.350340e+02 	-1.355110e+00 	3.298124e+00  	8.249441e-04  	-8.143015e-07 	-9.475434e-11 	4.134872e-13  	-1.012521e+03 	-3.294094e+00 
+	M = 2.016000e+00  	k/eps = 2.631579e-02  	sigma = 2.920000e+00  	muCoeff = 4.445053e-07  
+	constant d_Coefficients are: 1.283720e-03  	1.344517e-03  	3.719773e-03  	1.745126e-03  	1.750942e-03  	2.199672e-03  	1.832470e-03  	1.343299e-03  	1.342153e-03  	
+	constant omega_Coefficients are: 1.642628e-02  	1.565331e-02  	1.347176e-02  	1.813691e-02  	1.813691e-02  	2.631579e-02  	6.780448e-03  	1.565331e-02  	1.565331e-02  	
+
+H2O is species no. 6
+	Composition: 0 N	1 O	2 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 2.672145e+00  	3.056293e-03  	-8.730260e-07 	1.200996e-10  	-6.391618e-15 	-2.989921e+04 	6.862817e+00  	3.386842e+00  	3.474982e-03  	-6.354696e-06 	6.968581e-09  	-2.506588e-12 	-3.020811e+04 	2.590232e+00  
+	M = 1.801600e+01  	k/eps = 1.747030e-03  	sigma = 2.605000e+00  	muCoeff = 1.669595e-06  
+	constant d_Coefficients are: 5.868125e-04  	6.035163e-04  	3.557672e-03  	8.880184e-04  	9.022925e-04  	1.832470e-03  	9.245368e-04  	6.001878e-04  	5.970396e-04  	
+	constant omega_Coefficients are: 4.232345e-03  	4.033184e-03  	3.471092e-03  	4.673101e-03  	4.673101e-03  	6.780448e-03  	1.747030e-03  	4.033184e-03  	4.033184e-03  	
+
+HO2 is species no. 7
+	Composition: 0 N	2 O	1 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 4.072191e+00  	2.131296e-03  	-5.308145e-07 	6.112269e-11  	-2.841164e-15 	-1.579727e+02 	3.476029e+00  	2.979963e+00  	4.996697e-03  	-3.790997e-06 	2.354192e-09  	-8.089024e-13 	1.762273e+02  	9.222724e+00  
+	M = 3.300800e+01  	k/eps = 9.310987e-03  	sigma = 3.458000e+00  	muCoeff = 1.282499e-06  
+	constant d_Coefficients are: 3.861145e-04  	3.906634e-04  	2.510312e-03  	5.833493e-04  	5.953527e-04  	1.343299e-03  	6.001878e-04  	3.876228e-04  	3.847404e-04  	
+	constant omega_Coefficients are: 9.770769e-03  	9.310987e-03  	8.013345e-03  	1.078830e-02  	1.078830e-02  	1.565331e-02  	4.033184e-03  	9.310987e-03  	9.310987e-03  	
+
+H2O2 is species no. 8
+	Composition: 0 N	2 O	2 H
+	Coefficients of the nasa polynomials ( hot[7], cold[7] ): 4.573167e+00  	4.336136e-03  	-1.474689e-06 	2.348903e-10  	-1.431654e-14 	-1.800696e+04 	5.011369e-01  	3.388753e+00  	6.569226e-03  	-1.485012e-07 	-4.625805e-09 	2.471514e-12  	-1.766314e+04 	6.785363e+00  
+	M = 3.401600e+01  	k/eps = 9.310987e-03  	sigma = 3.458000e+00  	muCoeff = 1.301934e-06  
+	constant d_Coefficients are: 3.834791e-04  	3.878036e-04  	2.509210e-03  	5.804027e-04  	5.924658e-04  	1.342153e-03  	5.970396e-04  	3.847404e-04  	3.818363e-04  	
+	constant omega_Coefficients are: 9.770769e-03  	9.310987e-03  	8.013345e-03  	1.078830e-02  	1.078830e-02  	1.565331e-02  	4.033184e-03  	9.310987e-03  	9.310987e-03  	
+
+
+The List 'Used Third Bodies' has 1 Items.
+Used Third Bodies are M1.
+
+
+The List 'Third Body Coefficients' has 1 Items.
+The different third body efficiencies are:
+Nr.0: [M1] = 1[N2] + 1[O2] + 1[H] + 1[OH] 
+				+ 1[O] + 1[H2] + 1[H2O] + 1[HO2] 
+				+ 1[H2O2] 
+
+
+The List 'Reactions' has 38 Items.
+Reaction "1f" (id=0) (no. 0):
+	Order of Reaction is 2
+	O2 + H -> OH + O
+
+	A = 2e+14
+	n = 0
+	E = 70.3
+
+Reaction "1b" (id=19) (no. 1):
+	Order of Reaction is 2
+	O + OH -> H + O2
+
+	A = 3.9019e+11
+	n = 0.438708
+	E = -2.029
+
+Reaction "2f" (id=1) (no. 2):
+	Order of Reaction is 2
+	H2 + O -> OH + H
+
+	A = 50600
+	n = 2.67
+	E = 26.3
+
+Reaction "2b" (id=20) (no. 3):
+	Order of Reaction is 2
+	H + OH -> O + H2
+
+	A = 29118.4
+	n = 2.63872
+	E = 18.7662
+
+Reaction "3f" (id=2) (no. 4):
+	Order of Reaction is 2
+	H2 + OH -> H2O + H
+
+	A = 1e+08
+	n = 1.6
+	E = 13.8
+
+Reaction "3b" (id=21) (no. 5):
+	Order of Reaction is 2
+	H + H2O -> OH + H2
+
+	A = 1.04663e+09
+	n = 1.50264
+	E = 78.2761
+
+Reaction "4f" (id=3) (no. 6):
+	Order of Reaction is 2
+	2 OH -> H2O + O
+
+	A = 1.5e+09
+	n = 1.14
+	E = 0.42
+
+Reaction "4b" (id=22) (no. 7):
+	Order of Reaction is 2
+	O + H2O -> 2 OH
+
+	A = 2.72816e+10
+	n = 1.07392
+	E = 72.4299
+
+Reaction "5f" (id=4) (no. 8):
+	Order of Reaction is 3
+	2 H + M1 -> H2 + M1
+
+	A = 1.8e+18
+	n = -1
+	E = 0
+
+Reaction "5b" (id=23) (no. 9):
+	Order of Reaction is 2
+	H2 + M1 -> 2 H + M1
+
+	A = 4.19928e+17
+	n = -0.6512
+	E = 433.073
+
+Reaction "6f" (id=5) (no. 10):
+	Order of Readone
+ction is 3
+	2 O + M1 -> O2 + M1
+
+	A = 2.9e+17
+	n = -1
+	E = 0
+
+Reaction "6b" (id=24) (no. 11):
+	Order of Reaction is 2
+	O2 + M1 -> 2 O + M1
+
+	A = 1.99559e+19
+	n = -1.12119
+	E = 497.868
+
+Reaction "7f" (id=6) (no. 12):
+	Order of Reaction is 3
+	H + OH + M1 -> H2O + M1
+
+	A = 2.2e+22
+	n = -2
+	E = 0
+
+Reaction "7b" (id=25) (no. 13):
+	Order of Reaction is 2
+	H2O + M1 -> OH + H + M1
+
+	A = 5.3718e+22
+	n = -1.74856
+	E = 497.549
+
+Reaction "8f" (id=7) (no. 14):
+	Order of Reaction is 3
+	H + O2 + M1 -> HO2 + M1
+
+	A = 2.3e+18
+	n = -0.8
+	E = 0
+
+Reaction "8b" (id=26) (no. 15):
+	Order of Reaction is 2
+	HO2 + M1 -> O2 + H + M1
+
+	A = 3.29136e+18
+	n = -0.813542
+	E = 206.735
+
+Reaction "9f" (id=8) (no. 16):
+	Order of Reaction is 2
+	HO2 + H -> 2 OH
+
+	A = 1.5e+14
+	n = 0
+	E = 4.2
+
+Reaction "9b" (id=27) (no. 17):
+	Order of Reaction is 2
+	2 OH -> H + HO2
+
+	A = 2.74542e+10
+	n = 0.769766
+	E = 150.676
+
+Reaction "10f" (id=9) (no. 18):
+	Order of Reaction is 2
+	HO2 + H -> H2 + O2
+
+	A = 2.5e+13
+	n = 0
+	E = 2.9
+
+Reaction "10b" (id=28) (no. 19):
+	Order of Reaction is 2
+	O2 + H2 -> H + HO2
+
+	A = 4.07563e+12
+	n = 0.362342
+	E = 229.239
+
+Reaction "11f" (id=10) (no. 20):
+	Order of Reaction is 2
+	HO2 + H -> H2O + O
+
+	A = 3e+13
+	n = 0
+	E = 7.2
+
+Reaction "11b" (id=29) (no. 21):
+	Order of Reaction is 2
+	O + H2O -> H + HO2
+
+	A = 9.98659e+10
+	n = 0.703687
+	E = 225.686
+
+Reaction "12f" (id=11) (no. 22):
+	Order of Reaction is 2
+	HO2 + O -> OH + O2
+
+	A = 1.8e+13
+	n = 0
+	E = -1.7
+
+Reaction "12b" (id=30) (no. 23):
+	Order of Reaction is 2
+	O2 + OH -> O + HO2
+
+	A = 1.68867e+12
+	n = 0.331058
+	E = 217.105
+
+Reaction "13f" (id=12) (no. 24):
+	Order of Reaction is 2
+	HO2 + OH -> H2O + O2
+
+	A = 6e+13
+	n = 0
+	E = 0
+
+Reaction "13b" (id=31) (no. 25):
+	Order of Reaction is 2
+	O2 + H2O -> OH + HO2
+
+	A = 1.02377e+14
+	n = 0.264979
+	E = 290.815
+
+Reaction "14f" (id=13) (no. 26):
+	Order of Reaction is 2
+	2 HO2 -> H2O2 + O2
+
+	A = 2.5e+11
+	n = 0
+	E = -5.2
+
+Reaction "14b" (id=32) (no. 27):
+	Order of Reaction is 2
+	O2 + H2O2 -> 2 HO2
+
+	A = 3.71815e+13
+	n = -0.388026
+	E = 152.733
+
+Reaction "15f" (id=14) (no. 28):
+	Order of Reaction is 3
+	2 OH + M1 -> H2O2 + M1
+
+	A = 3.25e+22
+	n = -2
+	E = 0
+
+Reaction "15b" (id=33) (no. 29):
+	Order of Reaction is 2
+	H2O2 + M1 -> 2 OH + M1
+
+	A = 3.7792e+28
+	n = -3.17133
+	E = 218.192
+
+Reaction "16f" (id=15) (no. 30):
+	Order of Reaction is 2
+	H2O2 + H -> H2 + HO2
+
+	A = 1.7e+12
+	n = 0
+	E = 15.7
+
+Reaction "16b" (id=34) (no. 31):
+	Order of Reaction is 2
+	HO2 + H2 -> H + H2O2
+
+	A = 1.86345e+09
+	n = 0.750368
+	E = 84.1056
+
+Reaction "17f" (id=16) (no. 32):
+	Order of Reaction is 2
+	H2O2 + H -> H2O + OH
+
+	A = 1e+13
+	n = 0
+	E = 15
+
+Reaction "17b" (id=35) (no. 33):
+	Order of Reaction is 2
+	OH + H2O -> H + H2O2
+
+	A = 2.09981e+07
+	n = 1.42277
+	E = 294.358
+
+Reaction "18f" (id=17) (no. 34):
+	Order of Reaction is 2
+	H2O2 + O -> OH + HO2
+
+	A = 2.803e+13
+	n = 0
+	E = 26.8
+
+Reaction "18b" (id=36) (no. 35):
+	Order of Reaction is 2
+	HO2 + OH -> O + H2O2
+
+	A = 1.7681e+10
+	n = 0.719084
+	E = 87.6718
+
+Reaction "19f" (id=18) (no. 36):
+	Order of Reaction is 2
+	H2O2 + OH -> H2O + HO2
+
+	A = 5.4e+12
+	n = 0
+	E = 4.2
+
+Reaction "19b" (id=37) (no. 37):
+	Order of Reaction is 2
+	HO2 + H2O -> OH + H2O2
+
+	A = 6.19523e+10
+	n = 0.653005
+	E = 137.082
+
+N2
+O2
+H
+OH
+O
+H2
+H2O
+HO2
+H2O2

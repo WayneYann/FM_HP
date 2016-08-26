@@ -1,0 +1,11 @@
+#!/bin/csh
+ 
+cd bison-1.25
+echo "start installing bison"
+mkdir Installation
+configure --prefix=$FlameManLib
+make
+chmod 755 install-sh
+make install
+echo ""
+echo "done"

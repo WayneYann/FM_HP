@@ -1,0 +1,5 @@
+#!/bin/bash 
+
+CreateBinFile -i thermcdcdAll.nasa.mol -o thermdat.bin &> thermdat.out 
+mv thermdat.bin $myData
+

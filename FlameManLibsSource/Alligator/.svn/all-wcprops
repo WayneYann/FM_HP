@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/flame_master/!svn/ver/24/trunk/FlameManLibsSource/Alligator
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/svn/flame_master/!svn/ver/24/trunk/FlameManLibsSource/Alligator/Makefile
+END
+alligator.c
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/flame_master/!svn/ver/1/trunk/FlameManLibsSource/Alligator/alligator.c
+END
+alligator.h
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/flame_master/!svn/ver/1/trunk/FlameManLibsSource/Alligator/alligator.h
+END

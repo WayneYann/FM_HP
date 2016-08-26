@@ -1,0 +1,19 @@
+#!/bin/csh
+
+set dir="/Peter/Stuff/FLReader/ListTool"
+
+if ( $#argv >= 1 ) then
+	set list="$argv" 
+else
+	set list="\*.c \*.h \*.ir"
+endif
+echo getting \""$list"\" from \"$dir\"...
+
+ftp 134.130.171.6 << done
+cd $dir
+verbose
+lcd .
+pwd
+mget $list
+bye
+done

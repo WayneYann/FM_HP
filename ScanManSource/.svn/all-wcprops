@@ -1,0 +1,173 @@
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/flame_master/!svn/ver/24/trunk/ScanManSource
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/24/trunk/ScanManSource/Makefile
+END
+Redux.h
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/Redux.h
+END
+svd.c
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/svd.c
+END
+.tmp
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/.tmp
+END
+ReactionScan.y
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/flame_master/!svn/ver/24/trunk/ScanManSource/ReactionScan.y
+END
+FitPakLinearSystems.c
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/FitPakLinearSystems.c
+END
+svd.h
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/svd.h
+END
+Labels.c
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/Labels.c
+END
+Matrix.c
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/Matrix.c
+END
+FitPakFits.c
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/FitPakFits.c
+END
+ParseUtilities.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ParseUtilities.c
+END
+ListMan.c
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ListMan.c
+END
+CheckUtilities.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/CheckUtilities.c
+END
+ListMan.h
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ListMan.h
+END
+FitPakUtil.c
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/FitPakUtil.c
+END
+Mathematica.c
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/Mathematica.c
+END
+ScanMan.c
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ScanMan.c
+END
+ScanUtilities.c
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ScanUtilities.c
+END
+Mathematica.h
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/Mathematica.h
+END
+IndependentEQ.c
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/IndependentEQ.c
+END
+FitPak.h
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/FitPak.h
+END
+ReadThermoProps.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ReadThermoProps.h
+END
+ReactionScan.flex
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/flame_master/!svn/ver/24/trunk/ScanManSource/ReactionScan.flex
+END
+ScanMan.h
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/svn/flame_master/!svn/ver/16/trunk/ScanManSource/ScanMan.h
+END
+ReactionParser.h
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ReactionParser.h
+END
+Redux.c
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/Redux.c
+END
+ListUtilities1.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ListUtilities1.c
+END
+ListUtilities2.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/flame_master/!svn/ver/1/trunk/ScanManSource/ListUtilities2.c
+END

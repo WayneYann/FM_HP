@@ -1,0 +1,10 @@
+ALIGN	WSS.c	/^#define	ALIGN(n)		n = ( (n & ~kAlignMask) + \\$/
+DisposeWSS	WSS.c	/^void DisposeWSS( WSSPtr wss )$/
+MTestWSS	TestWSS.c	/^int main( int argc, char *argv[] )$/
+NewWSS	WSS.c	/^WSSPtr NewWSS( int size )$/
+WSSFreeMem	WSS.c	/^int WSSFreeMem( WSSPtr wss )$/
+WSSPop	WSS.c	/^void WSSPop( WSSPtr wss )$/
+WSSRemove	WSS.c	/^int WSSRemove( WSSPtr wss, void *to_be_freed )$/
+WSSTrace	WSS.c	/^void WSSTrace( WSSPtr wss, int print )$/
+_WSSPush	WSS.c	/^void *_WSSPush( WSSPtr wss, int size, const char */
+call_me	TestWSS.c	/^void call_me( WSSPtr wss, int n )$/

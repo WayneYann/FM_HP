@@ -1,0 +1,107 @@
+############
+# Numerics #
+############
+
+#### Newton solver ####
+
+#TimeDepFlag = TRUE
+DeltaTStart = 1e-4
+
+DampFlag = TRUE
+LambdaMin = 1.0e-3
+
+UseNumericalJac is TRUE
+#UseSecOrdJac is TRUE
+UseModifiedNewton = TRUE
+
+MaxIter = 100
+TolRes = 1.0e-12
+TolDy = 1.0e-4
+
+#### grid ####
+
+DeltaNewGrid = 15
+OneSoluOneGrid is TRUE
+initialgridpoints = 19
+maxgridpoints = 199
+q = -0.05
+R = 60
+
+########################
+# Sensitivity Analysis #
+########################
+
+SensAnal is TRUE
+SensObj is T
+SensObj is OH
+
+#######
+# I/O #
+#######
+
+WriteEverySolution is TRUE
+
+OutputPath is ./OutMixFrac
+StartProfilesFile is ./H2_p01_0chi1.73414tf0300to0300
+
+#############
+# Chemistry #
+#############
+
+MechanismFile is H2.allstar3.pre
+globalReaction is H2 + 0.5 O2 == H2O;
+
+fuel is H2
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+Flame is Counterflow Diffusion in Mixture Fraction Space
+
+#Scalar DissipationRate = 2
+#Scalar DissipationRate = 3
+#Scalar DissipationRate = 5
+#Scalar DissipationRate = 7
+#Scalar DissipationRate = 10
+#Scalar DissipationRate = 20
+#Scalar DissipationRate = 30
+#Scalar DissipationRate = 50
+#Scalar DissipationRate = 70
+
+ComputeWithRadiation is TRUE
+ConstLewisNumber is TRUE
+#LewisNumberFile is LewisNumberOne
+#NoDiffCorr is TRUE
+
+pressure = 1.0e5
+#pressure = 2.0e5
+#pressure = 3.0e5
+
+#######################
+# Boundary conditions #
+#######################
+
+#ToFuel N2
+#FromFuel H2
+#ContInc = 25
+#ContSide is left
+#ContType is Temperature
+#ContBound = 800
+
+
+Fuel Side {
+	dirichlet {
+		t = 300.0
+		y->H2 = 1.0
+	}
+}
+
+Oxidizer Side {
+	dirichlet {
+		t = 300.0
+		x->o2 = 0.21
+		x->n2 = 0.79
+	}
+}

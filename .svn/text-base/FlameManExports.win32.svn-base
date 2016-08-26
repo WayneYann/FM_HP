@@ -1,0 +1,35 @@
+### change the location of the FlameMaster package here
+export FlameManPath=/c/users/Guillaume/Research/Codes/FlameMasterSVN
+
+### do not change the following couple of lines
+export FlameManSource=$FlameManPath/FlameManSource
+export FlameManLib=$FlameManPath/FlameManLibs
+export myData=$FlameManPath/FlameManData
+alias FlameMaster=$FlameManLib/FlameMaster
+alias LT='$FlameManLib/ListTool -M'
+export PATH=$PATH:$FlameManLib
+
+### You have to choose between two possible options for FLEXPATH depending
+### on weather flex is installed on your machine and in the current path or not.
+### You can find out by typing 'which flex' in the command line. If you get a valid
+### path as a result, this means flex is installed. Then choose the first option.
+### If flex cannot be found, choose the second one. Then, flex will be installed
+### during the FlameMaster installation. You will do this following the procedure
+### outlined in the Readme file.
+###
+### Option 1: flex already exists on your machine (don't insert the path in the FLEXPATH definition)
+export FLEXPATH=""
+### Option 2: flex will be installed to $FlameManLib
+#export FLEXPATH=$FlameManLib/bin/
+
+# following for Windows (XP/VISTA) 32 bits - MSYS/MinGW
+export FlameManMach=WIN32
+export FlameManCC=gcc
+export FlameManCCOpts="-O3"
+export FlameManCXX=g++
+export FlameManCXXOpts="-O3"
+export FlameManLDCCOpts=""
+export FlameManYACC="bison"
+export FlameManRANLIB='ranlib $(LIBRARY)'
+export FlameManCVODEDIR="/usr/local"
+export FlameManCVODEVERSION="SUNDIALS24"

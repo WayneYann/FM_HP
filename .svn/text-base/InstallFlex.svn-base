@@ -1,0 +1,10 @@
+#!/bin/csh 
+ 
+echo "start installing flex"
+cd flex-2.5.4
+chmod 744 configure
+./configure --prefix=$FlameManLib
+make
+make check
+chmod 755 install.sh
+make install

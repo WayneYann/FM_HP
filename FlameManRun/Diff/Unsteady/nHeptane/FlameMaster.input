@@ -1,0 +1,69 @@
+############
+# Numerics #
+############
+
+#InitialGridPoints = 100
+InitialGridPoints = 13
+
+DeltaTMax = 1.0e-3
+RelTol = 1.0e-3
+AbsTol = 1.0e-7
+
+TStart = 0.0e-2
+TEnd = 10.0e-3
+
+UseNumericalDM = TRUE
+
+#######
+# I/O #
+#######
+
+NumberOfOutputs = 50
+
+OutputPath is Output
+#StartProfilesFile is Output/N-C7H16_p50t2.000e+00ms.tout
+
+#############
+# Chemistry #
+#############
+
+globalReaction is n-C7H16 + 11O2 == 8H2O + 7CO2;
+MechanismFile is nHeptane.allstarnew_oks.pre
+
+fuel is n-C7H16
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+Flame is Transient Flamelet
+
+#CAinFile is ./CAin
+
+#Scalar DissRate = 10
+Scalar DissRate = 0
+
+ComputeWithRadiation is TRUE
+LewisNumberFile is LewisNumbers
+
+Pressure = 50.0e5
+
+#######################
+# Boundary conditions #
+#######################
+
+Fuel Side {
+	dirichlet {
+		t = 570
+		y->n-C7H16 = 1.0
+	}
+}
+			
+Oxidizer Side {
+	dirichlet {
+		t = 800
+		x->o2 = 0.21
+		x->n2 = 0.79
+	}
+}

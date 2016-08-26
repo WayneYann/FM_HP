@@ -1,0 +1,61 @@
+############
+# Numerics #
+############
+
+InitialGridPoints = 201
+
+DeltaTMax = 1.0e-3
+RelTol = 1.0e-3
+AbsTol = 1.0e-7
+
+TStart = 0.0e-2
+TEnd = 20.0e-3
+
+#######
+# I/O #
+#######
+
+NumberOfOutputs = 50
+
+OutputPath is Output
+StartProfilesFile is H2_p01_0chi00016tf0300to0300
+
+#############
+# Chemistry #
+#############
+
+MechanismFile is H2.allstar3.pre
+globalReaction is H2 + 0.5 O2 == H2O;
+
+fuel is H2
+oxidizer is o2
+
+#########
+# Flame #
+#########
+
+Flame is Transient Flamelet
+
+Scalar DissRate = 1.64
+ComputeWithRadiation is TRUE
+LewisNumberFile is LewisNumbers
+Pressure = 1.0e5
+
+#######################
+# Boundary conditions #
+#######################
+
+Fuel Side {
+	dirichlet {
+		t = 300
+		y->H2 = 1.0
+	}
+}
+			
+Oxidizer Side {
+	dirichlet {
+		t = 300
+		x->o2 = 0.21
+		x->n2 = 0.79
+	}
+}

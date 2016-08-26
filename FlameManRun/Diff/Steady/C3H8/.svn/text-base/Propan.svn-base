@@ -1,0 +1,86 @@
+############
+# Numerics #
+############
+
+#### Newton solver ####
+
+#TimeDepFlag = TRUE
+DeltaTStart = 1.0e-8
+
+DampFlag = TRUE
+LambdaMin = 1.0e-2
+
+UseNumericalJac is TRUE
+#UseModifiedNewton = TRUE
+
+MaxIter = 10000
+TolRes = 1.0e-12
+TolDy = 1.0e-4
+
+#### grid ####
+
+DeltaNewGrid = 100
+OneSoluOneGrid is TRUE
+initialgridpoints = 20
+maxgridpoints = 139
+q = -0.25
+R = 30
+
+#######
+# I/O #
+#######
+
+#WriteRes is TRUE
+#WriteFullRes is TRUE
+WriteEverySolution is TRUE
+
+OutputPath is ./OutPropan
+StartProfilesFile is ./C3H8_p01_0a00100_0tf0300to0300
+
+#############
+# Chemistry #
+#############
+
+MechanismFile is C3H8.82.pre
+globalReaction is C3H8 + 5O2 == 3CO2 + 4H2O;
+
+fuel is C3H8
+oxidizer is O2
+
+#########
+# Flame #
+#########
+
+Flame is CounterFlowDiffusion
+#Flame is Counterflow Diffusion in Mixture Fraction Space
+
+#ThermoDiffusion is TRUE
+#ComputeWithRadiation is TRUE
+
+StrainRate = 100
+pressure = 1.0e5
+
+#######################
+# Boundary conditions #
+#######################
+
+#ContInc = -5.0
+#ContSide is bothSides
+#ContType is Temperature
+#ContBound = 298.0
+
+
+Fuel Side {
+	dirichlet {
+		t = 300.0
+		y->C3H8 = 1.0
+	}
+}
+
+Oxidizer Side {
+	dirichlet {
+		t = 300.0
+		x->o2 = 0.21
+		x->n2 = 0.79
+	}
+}

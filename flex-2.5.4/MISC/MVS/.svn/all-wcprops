@@ -1,0 +1,53 @@
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS
+END
+MVS.mail
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/MVS.mail
+END
+MVS.todo
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/MVS.todo
+END
+diffs
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/diffs
+END
+initscan-mvs.c
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/initscan-mvs.c
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/README
+END
+fixit.l
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/fixit.l
+END
+unfixit.l
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/unfixit.l
+END
+MVS.uudecode
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/flame_master/!svn/ver/1/trunk/flex-2.5.4/MISC/MVS/MVS.uudecode
+END
